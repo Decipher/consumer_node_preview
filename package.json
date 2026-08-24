@@ -1,0 +1,28 @@
+{
+  "name": "@drupal/consumer_node_preview",
+  "version": "0.1.0",
+  "description": "Provides consumer_node_preview functionality..",
+  "license": "GPL-2.0-or-later",
+  "contributors": [],
+  "scripts": {
+    "lint-css": "stylelint --allow-empty-input \"web/modules/custom/**/*.css\" \"web/themes/custom/**/*.css\"",
+    "lint-spell": "cspell --no-progress",
+    "lint": "npm run lint-css",
+    "lint-fix-css": "stylelint --allow-empty-input \"web/modules/custom/**/*.css\" \"web/themes/custom/**/*.css\" --fix",
+    "lint-fix": "npm run lint-fix-css",
+    "build": "echo Would run build"
+  },
+  "engines": {
+    "npm": ">=8.19.4",
+    "node": ">=18.20.8"
+  },
+  "dependencies": {
+    "is-positive": "^3.1.0"
+  },
+  "devDependencies": {
+    "cspell": "^8.19.4",
+    "stylelint": "^16.26.1",
+    "stylelint-config-standard": "^36.0.1",
+    "stylelint-order": "^7.0.1"
+  }
+}

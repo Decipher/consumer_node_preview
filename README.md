@@ -1,13 +1,29 @@
 # Consumer Node Preview
 
-Lets each consumer from the [Consumers](https://www.drupal.org/project/consumers)
-module register the frontend URLs that render node previews, and points the
-node preview screen at the frontend an editor picks.
+Lets each consumer register the frontend URLs that render node previews, and
+points the node preview screen at the frontend an editor picks.
 
 Built for decoupled sites that serve unsaved previews through
-[JSON:API Node Preview](https://www.drupal.org/project/jsonapi_node_preview).
+[JSON:API Node Preview](https://www.drupal.org/project/jsonapi_node_preview),
+with consumers from the
+[Consumers](https://www.drupal.org/project/consumers) module.
 
-## How it works
+- Project page: <https://www.drupal.org/project/consumer_node_preview>
+- Issue queue: <https://www.drupal.org/project/issues/consumer_node_preview>
+
+## Requirements
+
+- [Consumers](https://www.drupal.org/project/consumers)
+- [JSON:API Node Preview](https://www.drupal.org/project/jsonapi_node_preview)
+- Drupal core JSON:API and Node modules
+
+## Installation
+
+Install as you would normally install a contributed Drupal module. See the
+[Drupal documentation](https://www.drupal.org/docs/extending-drupal/installing-modules)
+for further information.
+
+## Features
 
 - Every consumer gets a **Preview targets** field: a list of label and URL
   pairs. One consumer can hold several targets, for example local, staging
@@ -74,3 +90,12 @@ cors.config:
 ```
 
 Never use a wildcard origin together with `supportsCredentials`.
+
+## Maintainers
+
+- Stuart Clark (Deciphered) - <https://www.drupal.org/u/deciphered>
+
+---
+
+Repository initiated with
+[drupal_extension_scaffold](https://github.com/AlexSkrypnyk/drupal_extension_scaffold).

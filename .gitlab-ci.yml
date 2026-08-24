@@ -1,0 +1,109 @@
+################
+# DrupalCI GitLabCI template
+#
+# Gitlab-ci.yml to replicate DrupalCI testing for Contrib
+#
+# With thanks to:
+#   * The GitLab Acceleration Initiative participants
+#   * DrupalSpoons
+################
+
+################
+# Guidelines
+#
+# This template is designed to give any Contrib maintainer everything they need to test, without requiring modification. It is also designed to keep up to date with Core Development automatically through the use of include files that can be centrally maintained.
+#
+# However, you can modify this template if you have additional needs for your project.
+################
+
+################
+# Includes
+#
+# Additional configuration can be provided through includes.
+# One advantage of include files is that if they are updated upstream, the changes affect all pipelines using that include.
+#
+# Includes can be overridden by re-declaring anything provided in an include, here in gitlab-ci.yml
+# https://docs.gitlab.com/ee/ci/yaml/includes.html#override-included-configuration-values
+################
+
+include:
+  ################
+  # DrupalCI includes:
+  # As long as you include this, any future includes added by the Drupal Association will be accessible to your pipelines automatically.
+  # View these include files at https://git.drupalcode.org/project/gitlab_templates/
+  ################
+  - project: $_GITLAB_TEMPLATES_REPO
+    ref: $_GITLAB_TEMPLATES_REF
+    file:
+      - '/includes/include.drupalci.main.yml'
+      - '/includes/include.drupalci.variables.yml'
+      - '/includes/include.drupalci.workflows.yml'
+
+################
+# Pipeline configuration variables
+#
+# These are the variables provided to the Run Pipeline form that a user may want to override.
+#
+# Docs at https://git.drupalcode.org/project/gitlab_templates/-/blob/1.0.x/includes/include.drupalci.variables.yml
+################
+variables:
+  OPT_IN_TEST_PREVIOUS_MAJOR: 1
+  OPT_IN_TEST_PREVIOUS_MINOR: 1
+  OPT_IN_TEST_NEXT_MINOR: 1
+  OPT_IN_TEST_NEXT_MAJOR: 1
+  CORE_PREVIOUS_PHP_MIN: 8.1
+  _PHPUNIT_EXTRA: '--no-coverage --configuration=phpunit.gitlab-ci.xml'
+
+cspell:
+  allow_failure: false
+phpcs:
+  allow_failure: false
+phpstan:
+  allow_failure: false
+phpstan (next minor):
+  allow_failure: true
+phpstan (previous major):
+  rules:
+    # We are only interested in PHPStan on the current version.
+    - when: never
+stylelint:
+  allow_failure: false
+
+################
+# phpunit stability
+#
+# Coverage runs in GitHub Actions, not here.
+#
+# This module has kernel tests only. The shared template always starts a
+# Selenium container and a chromedriver container for the phpunit job
+# anyway. Nothing here talks to them. They just eat CPU and memory on the
+# runner, alongside the actual test run. Keep only the database service.
+#
+# resource_group makes GitLab run one phpunit job at a time, project-wide.
+# Without it, two MRs pushed close together can still fight over the same
+# runner, even with the services trimmed. Confirmed directly: the same
+# commit passes alone and fails when it runs next to another branch's job.
+#
+# Even alone and serialized, some failures still happen. Confirmed
+# directly: a first attempt with no retry hit the same cluster of
+# Functional test failures again. The shared template's default retry only
+# covers infra failures (unknown_failure, api_failure,
+# stuck_or_timeout_failure, runner_system_failure, scheduler_failure). A
+# real PHPUnit failure is a script_failure, and that's not on the list.
+# Add it too, so the job gets an automatic retry instead of failing
+# outright.
+################
+phpunit:
+  services:
+    - name: "$_CONFIG_DOCKERHUB_ROOT/$_TARGET_DB_TYPE-$_TARGET_DB_VERSION:$_TARGET_DB_IMAGE_TAG"
+      alias: database
+  resource_group: phpunit
+  retry:
+    max: 2
+    when:
+      - unknown_failure
+      - api_failure
+      - stuck_or_timeout_failure
+      - runner_system_failure
+      - scheduler_failure
+      - script_failure

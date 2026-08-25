@@ -53,6 +53,11 @@ variables:
   OPT_IN_TEST_NEXT_MAJOR: 1
   CORE_PREVIOUS_PHP_MIN: 8.1
   _PHPUNIT_EXTRA: '--no-coverage --configuration=phpunit.gitlab-ci.xml'
+  # The scaffold's .stylelintrc.js extends packages that only exist in the
+  # local node_modules. DrupalCI runs core's stylelint, which resolves the
+  # config relative to its own location, so point it at core's config. The
+  # scaffold config still governs local lint runs.
+  _STYLELINT_EXTRA: '--config=$CI_PROJECT_DIR/$_WEB_ROOT/core/.stylelintrc.json'
 
 cspell:
   allow_failure: false

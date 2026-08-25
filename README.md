@@ -17,6 +17,12 @@ with consumers from the
 - [JSON:API Node Preview](https://www.drupal.org/project/jsonapi_node_preview)
 - Drupal core JSON:API and Node modules
 
+JSON:API Node Preview 1.0.0-beta5 and earlier serve stale or missing data for
+edited and never saved paragraphs, and its resolver is disabled entirely on
+sites that also run jsonapi_resources (any jsonapi_views site). Use a version
+with the include resolver fixes from
+[#3367724](https://git.drupalcode.org/project/jsonapi_node_preview/-/issues/3367724).
+
 ## Installation
 
 Install as you would normally install a contributed Drupal module. See the
@@ -42,6 +48,11 @@ never reaches the frontend's server logs:
 ```
 http://localhost:3000/node/preview/[view_mode]#[jsonapi_node_preview]
 ```
+
+Frontend implementers: read the raw `location.hash`, decode it, then repair
+the scheme. Routers rewrite the URL and can collapse the double slash, so
+`#http://…` arrives as `#http:/…`. Apply
+`replace(/^(https?):\/(?!\/)/, '$1://')` after decoding.
 
 ## Registering targets over the API
 

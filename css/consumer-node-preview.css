@@ -1,9 +1,100 @@
-.consumer-node-preview iframe {
+/**
+ * @file
+ * The tabbed node preview, in the admin theme's own tab, button and message
+ * styles. Spacing reads the admin theme's tokens where it has them. The frame
+ * fills the viewport that Drupal.displace leaves below the toolbar.
+ */
+
+.consumer-node-preview {
+  /* The viewport left by the displaced admin bars and the preview bar. */
+  --consumer-node-preview-height: calc(
+    100dvh - var(--drupal-displace-offset-top, 0px) -
+      var(--drupal-displace-offset-bottom, 0px) - 8rem
+  );
+}
+
+.consumer-node-preview__tabs {
+  margin-block-end: var(--admin-space-l, var(--space-l, 1.5rem));
+}
+
+/* A clicked tab stays focused. The outline stays for keyboard focus. */
+.consumer-node-preview__tabs .tabs__link:focus:not(:focus-visible) {
+  outline: 0;
+}
+
+.consumer-node-preview__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--admin-space-s, var(--space-s, 0.75rem));
+  margin-block-end: var(--admin-space-s, var(--space-s, 0.75rem));
+}
+
+.consumer-node-preview__target {
+  display: flex;
+  align-items: center;
+  gap: var(--admin-space-xs, var(--space-xs, 0.5rem));
+}
+
+.consumer-node-preview__widths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--admin-space-xs, var(--space-xs, 0.5rem));
+}
+
+.consumer-node-preview__widths .button {
+  margin: 0;
+}
+
+.consumer-node-preview__viewport {
+  --consumer-node-preview-width: 100%;
+}
+
+.consumer-node-preview__frame {
+  display: block;
+  box-sizing: border-box;
+  width: min(100%, var(--consumer-node-preview-width));
+  height: var(--consumer-node-preview-height);
+  min-height: 20rem;
+  margin-inline: auto;
+  border: 1px solid var(--admin-color-border, #d3d4d9);
+  border-radius: var(--admin-radius-m, 4px);
   background-color: #fff;
-  border: none;
-  height: 100%;
-  inset: 0;
-  position: fixed;
-  width: 100%;
-  z-index: 500;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .consumer-node-preview__frame {
+    transition: width 0.2s ease;
+  }
+}
+
+.consumer-node-preview__message {
+  margin-block: 0 var(--admin-space-m, var(--space-m, 1rem));
+}
+
+.consumer-node-preview__page {
+  padding: var(--admin-space-l, var(--space-l, 1.5rem));
+  border: 1px solid var(--admin-color-border-soft, #e6e7eb);
+  border-radius: var(--admin-radius-m, 4px);
+  background-color: #fff;
+}
+
+.consumer-node-preview__request {
+  margin-block: 0 var(--admin-space-s, var(--space-s, 0.75rem));
+  overflow-wrap: anywhere;
+}
+
+.consumer-node-preview__document {
+  overflow: auto;
+  box-sizing: border-box;
+  max-height: var(--consumer-node-preview-height);
+  margin: 0;
+  padding: var(--admin-space-m, var(--space-m, 1rem));
+  tab-size: 2;
+  border: 1px solid var(--admin-color-border, #d3d4d9);
+  border-radius: var(--admin-radius-m, 4px);
+  background-color: #fff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  line-height: 1.5;
 }

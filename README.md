@@ -31,22 +31,60 @@ for further information.
 
 ## Features
 
-- Every consumer gets a **Preview targets** field: a list of label and URL
-  pairs. One consumer can hold several targets, for example local, staging
-  and production.
-- A URL is a template. It can use two tokens:
-  - `[jsonapi_node_preview]`: the absolute URL of the JSON:API preview
-    endpoint for the previewed node.
-  - `[view_mode]`: the view mode of the preview.
-- The node preview form gets a **Frontend** select. When the editor picks a
-  target, the preview page renders that URL in an iframe. The Drupal option
-  keeps the core preview.
+- **A tabbed preview screen.** Core's Preview button opens three tabs:
+  - **Frontend** frames the unsaved node in a frontend, with Phone, Tablet
+    and Full widths, a picker when there is more than one target, and an
+    "Open in new tab" link. It fills the space below the admin toolbar.
+  - **Drupal** shows core's own preview.
+  - **JSON:API** shows the preview document the frontend reads.
 
-A typical target URL puts the endpoint in the fragment, so the preview URL
-never reaches the frontend's server logs:
+  The screen remembers the editor's last tab, width and frontend. The preview
+  route becomes a node operation, so it uses the admin theme when "Use the
+  administration theme when editing or creating content" is on.
+- **Targets per consumer.** Every consumer gets a **Preview targets** field:
+  a list of label and URL pairs, for example local, staging and production.
+  A frontend can also register its own targets over the API (see below).
+- **Targets per environment.** settings.php can list targets too, which suits
+  a URL that differs per environment and should not travel with a database
+  copy:
+
+  ```php
+  $settings['consumer_node_preview'] = [
+    'targets' => [
+      'frontend' => [
+        'label' => 'Frontend',
+        'url' => 'https://www.example.com/node/preview?vm=[view_mode]#[jsonapi_node_preview_path]',
+      ],
+    ],
+    // Optional. Else the first target opens.
+    'default' => 'settings:frontend',
+  ];
+  ```
+
+  Site targets come first in the picker. A `?frontend=<key>` query parameter
+  on the preview URL picks a target, where the key is `settings:<name>` or
+  `<consumer id>:<delta>`.
+
+## Target URLs
+
+A target URL is a template. It can use these tokens:
+
+- `[jsonapi_node_preview]`: the absolute URL of the node's JSON:API preview
+  document.
+- `[jsonapi_node_preview_path]`: the same, as a path from the site root. Use
+  it when the frontend reaches Drupal on its own origin, through a proxy, so
+  the request needs no CORS.
+- `[uuid]`: the node's UUID, which keys its preview.
+- `[view_mode]`: the view mode being previewed.
+
+The preview document includes the node's entity reference revisions fields,
+such as paragraphs, so a frontend gets their unsaved values in one request.
+
+Put the document URL in the fragment, so it never reaches the frontend's
+server logs:
 
 ```
-http://localhost:3000/node/preview/[view_mode]#[jsonapi_node_preview]
+http://localhost:3000/node/preview?vm=[view_mode]#[jsonapi_node_preview]
 ```
 
 Frontend implementers: read the raw `location.hash`, decode it, then repair

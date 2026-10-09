@@ -1,4 +1,10 @@
 preview:
   css:
-    theme:
+    component:
       css/consumer-node-preview.css: {}
+  js:
+    js/consumer-node-preview.js: {}
+  dependencies:
+    - core/drupal
+    - core/drupal.displace
+    - core/once

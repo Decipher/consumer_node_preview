@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\consumer_node_preview\Controller;
 
+use Drupal\Component\Utility\UrlHelper;
 use Drupal\consumer_node_preview\PreviewTargetsProviderInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\node\Controller\NodePreviewController as CoreNodePreviewController;
@@ -12,10 +13,11 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
- * Renders a node preview inside the selected frontend.
+ * Renders core's node preview as tabs: the frontend, Drupal and JSON:API.
  *
- * When no frontend is chosen, when the chosen key does not resolve, or when
- * the editor picked the Drupal option, the core preview renders instead.
+ * The frontend tab frames a preview target. It opens on the target in the
+ * "frontend" query parameter, else the site's default target. With no
+ * targets, it says how to add one.
  */
 final class NodePreviewController extends CoreNodePreviewController {
 
@@ -49,26 +51,35 @@ final class NodePreviewController extends CoreNodePreviewController {
    * @param string|null $langcode
    *   The language code.
    */
-  public function view(EntityInterface $node_preview, $view_mode_id = 'full', $langcode = NULL) {
-    // The core build carries the preview bar in its attachments. Build it
-    // first, so the bar and its view mode state stay correct in both
-    // branches.
-    $core_build = parent::view($node_preview, $view_mode_id, $langcode);
-
-    $request = $this->requestStack->getCurrentRequest();
-    $key = $request?->query->get('frontend');
-    $target = is_string($key) && $key !== '' ? $this->targetsProvider->getTargetByKey($key) : NULL;
-    if ($target === NULL) {
-      return $core_build;
-    }
+  public function view(EntityInterface $node_preview, $view_mode_id = 'full', $langcode = NULL): array {
+    $drupal = parent::view($node_preview, $view_mode_id, $langcode);
+    // The page renderer reads page_top only from the top of the main content,
+    // and core's preview bar is there.
+    $page_top = $drupal['#attached']['page_top'] ?? [];
+    unset($drupal['#attached']['page_top']);
 
     assert($node_preview instanceof NodeInterface);
+    $targets = [];
+    foreach ($this->targetsProvider->getAllTargets() as $key => $target) {
+      $targets[$key] = [
+        'label' => $target['label'],
+        'url' => UrlHelper::stripDangerousProtocols($this->targetsProvider->resolveUrl($target['url'], $node_preview, $view_mode_id)),
+      ];
+    }
+    $requested = $this->requestStack->getCurrentRequest()?->query->get('frontend');
+    $active = is_string($requested) && isset($targets[$requested]) ? $requested : $this->targetsProvider->getDefaultKey();
+
     return [
       '#theme' => 'consumer_node_preview',
-      '#label' => $target['label'],
-      '#url' => $this->targetsProvider->resolveUrl($target['url'], $node_preview, $view_mode_id),
-      '#view_mode_id' => $view_mode_id,
-      '#attached' => $core_build['#attached'] ?? [],
+      '#title' => $node_preview->label(),
+      '#drupal' => $drupal,
+      '#targets' => $targets,
+      '#active_target' => $active,
+      '#jsonapi_url' => $this->targetsProvider->getEndpoint($node_preview, FALSE),
+      '#attached' => [
+        'library' => ['consumer_node_preview/preview'],
+        'page_top' => $page_top,
+      ],
       '#cache' => ['max-age' => 0],
     ];
   }

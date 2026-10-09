@@ -7,10 +7,7 @@
 
 .consumer-node-preview {
   /* The viewport left by the displaced admin bars and the preview bar. */
-  --consumer-node-preview-height: calc(
-    100dvh - var(--drupal-displace-offset-top, 0px) -
-      var(--drupal-displace-offset-bottom, 0px) - 8rem
-  );
+  --consumer-node-preview-height: calc(100dvh - var(--drupal-displace-offset-top, 0px) - var(--drupal-displace-offset-bottom, 0px) - 8rem);
 }
 
 .consumer-node-preview__tabs {

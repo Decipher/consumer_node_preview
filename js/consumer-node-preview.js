@@ -45,9 +45,12 @@
         ? body
         : `${response.status} ${response.statusText}\n\n${body}`;
     } catch (error) {
-      code.textContent = Drupal.t('The document could not be loaded: @message', {
-        '@message': error.message,
-      });
+      code.textContent = Drupal.t(
+        'The document could not be loaded: @message',
+        {
+          '@message': error.message,
+        },
+      );
     }
   }
 
@@ -59,7 +62,9 @@
    */
   function init(preview) {
     const tabs = Array.from(preview.querySelectorAll('[role="tab"]'));
-    const output = preview.querySelector('[data-consumer-node-preview-jsonapi]');
+    const output = preview.querySelector(
+      '[data-consumer-node-preview-jsonapi]',
+    );
     let loaded = false;
 
     // Only a tab the editor picks is remembered, not the page's default.
@@ -106,7 +111,9 @@
     });
 
     select(
-      tabs.find((tab) => tab.dataset.consumerNodePreviewTab === recall('tab')) ||
+      tabs.find(
+        (tab) => tab.dataset.consumerNodePreviewTab === recall('tab'),
+      ) ||
         tabs.find((tab) => tab.getAttribute('aria-selected') === 'true') ||
         tabs[0],
       false,
@@ -116,7 +123,9 @@
     // the URL wins over the remembered one.
     const frame = preview.querySelector('[data-consumer-node-preview-frame]');
     const open = preview.querySelector('[data-consumer-node-preview-open]');
-    const targets = preview.querySelector('[data-consumer-node-preview-target]');
+    const targets = preview.querySelector(
+      '[data-consumer-node-preview-target]',
+    );
     if (targets) {
       const show = (option) => {
         option.selected = true;

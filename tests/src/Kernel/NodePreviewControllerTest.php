@@ -9,6 +9,7 @@ use Drupal\consumers\Entity\Consumer;
 use Drupal\field\Entity\FieldConfig;
 use Drupal\field\Entity\FieldStorageConfig;
 use Drupal\KernelTests\KernelTestBase;
+use Drupal\node\Controller\NodePreviewController as CoreNodePreviewController;
 use Drupal\node\Entity\Node;
 use Drupal\node\Entity\NodeType;
 use Drupal\node\NodeInterface;
@@ -73,9 +74,24 @@ class NodePreviewControllerTest extends KernelTestBase {
 
   /**
    * Tests that core's preview bar stays where the page renderer reads it.
+   *
+   * Drupal 11 core attaches the bar to the controller's page_top, and the
+   * page renderer reads it from the top of the main content. Drupal 10 core
+   * adds it in hook_page_top() instead, and rejects page_top in #attached.
+   * So the preview keeps exactly what core attached, and adds no page_top
+   * key of its own.
    */
   public function testCoresPreviewBarStaysAtTheTopOfThePage(): void {
-    $this->assertArrayHasKey('node_preview', $this->preview()['#attached']['page_top'] ?? []);
+    $node = $this->node();
+    $core = CoreNodePreviewController::create($this->container)->view($node, 'full');
+    $this->assertSame(
+      array_keys($core['#attached']['page_top'] ?? []),
+      array_keys($this->preview($node)['#attached']['page_top'] ?? []),
+    );
+    $this->assertSame(
+      isset($core['#attached']['page_top']),
+      array_key_exists('page_top', $this->preview($node)['#attached']),
+    );
   }
 
   /**

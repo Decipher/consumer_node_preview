@@ -53,10 +53,15 @@ final class NodePreviewController extends CoreNodePreviewController {
    */
   public function view(EntityInterface $node_preview, $view_mode_id = 'full', $langcode = NULL): array {
     $drupal = parent::view($node_preview, $view_mode_id, $langcode);
-    // The page renderer reads page_top only from the top of the main content,
-    // and core's preview bar is there.
-    $page_top = $drupal['#attached']['page_top'] ?? [];
-    unset($drupal['#attached']['page_top']);
+    // Drupal 11 core attaches its preview bar to page_top, and the page
+    // renderer reads page_top only from the top of the main content. So it
+    // moves up to this build. Drupal 10 core adds the bar in hook_page_top()
+    // and rejects page_top in #attached, so then there is nothing to move.
+    $attached = ['library' => ['consumer_node_preview/preview']];
+    if (isset($drupal['#attached']['page_top'])) {
+      $attached['page_top'] = $drupal['#attached']['page_top'];
+      unset($drupal['#attached']['page_top']);
+    }
 
     assert($node_preview instanceof NodeInterface);
     $targets = [];
@@ -76,10 +81,7 @@ final class NodePreviewController extends CoreNodePreviewController {
       '#targets' => $targets,
       '#active_target' => $active,
       '#jsonapi_url' => $this->targetsProvider->getEndpoint($node_preview, FALSE),
-      '#attached' => [
-        'library' => ['consumer_node_preview/preview'],
-        'page_top' => $page_top,
-      ],
+      '#attached' => $attached,
       '#cache' => ['max-age' => 0],
     ];
   }

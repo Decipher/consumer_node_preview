@@ -93,8 +93,9 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     if (!preg_match('/^(\d+):(\d+)$/', $key, $matches)) {
       return NULL;
     }
+    // Like getAllTargets(), only a published consumer's targets count.
     $consumer = $this->entityTypeManager->getStorage('consumer')->load($matches[1]);
-    if (!$consumer instanceof ConsumerInterface) {
+    if (!$consumer instanceof ConsumerInterface || !$consumer->get('status')->value) {
       return NULL;
     }
     return $this->getTargets($consumer)[(int) $matches[2]] ?? NULL;

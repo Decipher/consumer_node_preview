@@ -235,6 +235,24 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   }
 
   /**
+   * Tests that a default naming an unpublished consumer's target falls back.
+   *
+   * It falls back to the first target in the picker.
+   */
+  public function testDefaultForUnpublishedConsumerFallsBack(): void {
+    $hidden = $this->createConsumer('Hidden', [
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p'],
+    ]);
+    $hidden->set('status', FALSE)->save();
+    $shown = $this->createConsumer('Shown', [
+      ['label' => 'Live', 'url' => 'https://example.com/p'],
+    ]);
+
+    $this->setSetting('consumer_node_preview', ['default' => $hidden->id() . ':0']);
+    $this->assertSame($shown->id() . ':0', $this->provider->getDefaultKey());
+  }
+
+  /**
    * Returns the preview_targets violations of a consumer with one target.
    *
    * @param array{label: string, url: string} $target

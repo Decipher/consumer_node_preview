@@ -110,9 +110,8 @@ final class PreviewTargetsController extends ControllerBase {
 
     $values = [];
     foreach (array_values($decoded['targets']) as $delta => $target) {
-      $error = $this->validateTarget($target);
-      if ($error !== NULL) {
-        return sprintf('Target %d: %s', $delta, $error);
+      if (!is_array($target) || !is_string($target['label'] ?? NULL) || !is_string($target['url'] ?? NULL)) {
+        return sprintf('Target %d: each target must be an object with a "label" string and a "url" string.', $delta);
       }
       $values[] = [
         'label' => trim($target['label']),
@@ -120,33 +119,19 @@ final class PreviewTargetsController extends ControllerBase {
       ];
     }
 
+    // The field's constraints hold the rules, so this endpoint and the
+    // consumer form cannot drift apart. Only this field's violations count:
+    // a problem elsewhere on the consumer is not this endpoint's to report.
     $consumer->set('preview_targets', $values);
+    $violations = $consumer->validate()->getByField('preview_targets');
+    if (count($violations) > 0) {
+      $messages = [];
+      foreach ($violations as $violation) {
+        $messages[] = sprintf('%s: %s', $violation->getPropertyPath(), strip_tags((string) $violation->getMessage()));
+      }
+      return implode(' ', $messages);
+    }
     $consumer->save();
-    return NULL;
-  }
-
-  /**
-   * Validates one target entry.
-   *
-   * @return string|null
-   *   An error message, or NULL when the target is valid.
-   */
-  protected function validateTarget(mixed $target): ?string {
-    if (!is_array($target)) {
-      return 'each target must be an object with "label" and "url".';
-    }
-    $label = $target['label'] ?? NULL;
-    $url = $target['url'] ?? NULL;
-    if (!is_string($label) || trim($label) === '' || mb_strlen($label) > 255) {
-      return 'the label must be a non-empty string of at most 255 characters.';
-    }
-    if (!is_string($url) || trim($url) === '' || mb_strlen($url) > 2048) {
-      return 'the url must be a non-empty string of at most 2048 characters.';
-    }
-    $parts = parse_url(trim($url));
-    if (!is_array($parts) || empty($parts['host']) || !in_array($parts['scheme'] ?? '', ['http', 'https'], TRUE)) {
-      return 'the url must be absolute and use http or https.';
-    }
     return NULL;
   }
 

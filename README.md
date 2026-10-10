@@ -44,6 +44,8 @@ for further information.
 - **Targets per consumer.** Every consumer gets a **Preview targets** field:
   a list of label and URL pairs, for example local, staging and production.
   A frontend can also register its own targets over the API (see below).
+  A consumer's target URL must be absolute and use http or https. The form
+  and the API check the same rule.
 - **Targets per environment.** settings.php can list targets too, which suits
   a URL that differs per environment and should not travel with a database
   copy:
@@ -60,6 +62,10 @@ for further information.
     'default' => 'settings:frontend',
   ];
   ```
+
+  A site target can be a path from the site root, such as `/node/preview`.
+  It loads on the same host as Drupal, for a frontend served there through
+  a proxy. Consumer targets cannot, because that depends on the environment.
 
   Site targets come first in the picker. A `?frontend=<key>` query parameter
   on the preview URL picks a target, where the key is `settings:<name>` or

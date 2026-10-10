@@ -20,7 +20,7 @@ function consumer_node_preview_entity_base_field_info(EntityTypeInterface $entit
   if ($entity_type->id() === 'consumer') {
     $fields['preview_targets'] = BaseFieldDefinition::create('consumer_preview_target')
       ->setLabel(new TranslatableMarkup('Preview targets'))
-      ->setDescription(new TranslatableMarkup('Frontend URLs that render node previews for this consumer. The URL can use the tokens [jsonapi_node_preview] and [view_mode].'))
+      ->setDescription(new TranslatableMarkup('Frontend URLs that render node previews for this consumer. The URL can use the tokens [jsonapi_node_preview], [jsonapi_node_preview_path], [uuid] and [view_mode].'))
       ->setCardinality(FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED)
       ->setTranslatable(FALSE)
       ->setDisplayOptions('form', [

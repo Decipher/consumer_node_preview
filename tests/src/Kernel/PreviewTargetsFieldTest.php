@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Drupal\node\Entity\Node;
 use Drupal\node\Entity\NodeType;
+use Symfony\Component\Validator\ConstraintViolationListInterface;
 
 /**
  * Tests the preview targets field and the provider service.
@@ -124,6 +125,63 @@ class PreviewTargetsFieldTest extends KernelTestBase {
 
     $this->assertStringContainsString('http://localhost:3000/node/preview/full#', $url);
     $this->assertStringContainsString("/jsonapi/node/article/{$node->uuid()}/preview", $url);
+  }
+
+  /**
+   * Tests that a consumer target URL must be an absolute http or https URL.
+   *
+   * The consumer form and the targets endpoint both save through this rule.
+   * Relative URLs belong in settings.php only.
+   */
+  public function testConsumerTargetUrlMustBeAbsoluteHttp(): void {
+    $invalid = [
+      'javascript:alert(1)',
+      'data:text/html,<p>x</p>',
+      'ftp://example.com/p',
+      '/node/preview#[jsonapi_node_preview_path]',
+      '//evil.example.com/p',
+      'node/preview',
+    ];
+    foreach ($invalid as $url) {
+      $this->assertCount(1, $this->targetViolations(['label' => 'Bad', 'url' => $url]), $url);
+    }
+
+    $valid = [
+      'http://localhost:3000/p#[jsonapi_node_preview]',
+      'https://stage.example.com/node/preview?vm=[view_mode]#[jsonapi_node_preview]',
+    ];
+    foreach ($valid as $url) {
+      $this->assertCount(0, $this->targetViolations(['label' => 'Good', 'url' => $url]), $url);
+    }
+  }
+
+  /**
+   * Tests that a target needs both a label and a URL.
+   *
+   * A row with only one of them is an error. It is not dropped in silence.
+   */
+  public function testTargetNeedsLabelAndUrl(): void {
+    $this->assertCount(1, $this->targetViolations(['label' => 'Local', 'url' => '']));
+    $this->assertCount(1, $this->targetViolations(['label' => '', 'url' => 'http://localhost:3000/p']));
+    $this->assertCount(1, $this->targetViolations(['label' => str_repeat('a', 256), 'url' => 'http://localhost:3000/p']));
+  }
+
+  /**
+   * Returns the preview_targets violations of a consumer with one target.
+   *
+   * @param array{label: string, url: string} $target
+   *   The target.
+   *
+   * @return \Symfony\Component\Validator\ConstraintViolationListInterface
+   *   The violations on the preview_targets field.
+   */
+  protected function targetViolations(array $target): ConstraintViolationListInterface {
+    $consumer = Consumer::create([
+      'client_id' => 'app',
+      'label' => 'App',
+      'preview_targets' => [$target],
+    ]);
+    return $consumer->validate()->getByField('preview_targets');
   }
 
 }

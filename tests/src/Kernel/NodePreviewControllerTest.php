@@ -159,6 +159,25 @@ class NodePreviewControllerTest extends KernelTestBase {
   }
 
   /**
+   * Tests that a stale frontend key in the query falls back to the default.
+   */
+  public function testStaleQueryKeyFallsBackToTheDefault(): void {
+    $this->setSetting('consumer_node_preview', [
+      'targets' => [
+        'local' => ['label' => 'Local', 'url' => 'http://localhost:3000/[uuid]'],
+        'live' => ['label' => 'Live', 'url' => 'https://example.com/[uuid]'],
+      ],
+      'default' => 'settings:live',
+    ]);
+    $request = Request::create('/', 'GET', ['frontend' => '9:9']);
+    $request->setSession(new Session(new MockArraySessionStorage()));
+    $this->container->get('request_stack')->push($request);
+
+    $node = $this->node();
+    $this->assertStringContainsString('<iframe src="https://example.com/' . $node->uuid() . '"', $this->html($node));
+  }
+
+  /**
    * Tests that the JSON:API tab and token include revisioned references.
    */
   public function testTheEndpointIncludesRevisionedReferences(): void {

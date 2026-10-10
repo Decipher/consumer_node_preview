@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\consumer_node_preview\Kernel;
 
 use Drupal\consumers\Entity\Consumer;
+use Drupal\Core\Access\CsrfRequestHeaderAccessCheck;
 use Drupal\KernelTests\KernelTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -82,18 +83,37 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
 
   /**
    * Sends a request to the endpoint and returns the response.
+   *
+   * @param string $method
+   *   The HTTP method.
+   * @param array|null $payload
+   *   The JSON body, if any.
+   * @param string|null $consumer_uuid
+   *   The consumer query parameter, if any.
+   * @param array<string, string> $headers
+   *   Extra request headers.
+   * @param bool $session
+   *   TRUE to send a session cookie, as a browser does after sign-in.
    */
-  protected function call(string $method, ?array $payload = NULL, ?string $consumer_uuid = NULL): Response {
+  protected function call(string $method, ?array $payload = NULL, ?string $consumer_uuid = NULL, array $headers = [], bool $session = FALSE): Response {
     $uri = '/api/consumer-node-preview/targets';
     if ($consumer_uuid !== NULL) {
       $uri .= '?consumer=' . $consumer_uuid;
     }
+    $server = ['CONTENT_TYPE' => 'application/json'];
+    foreach ($headers as $name => $value) {
+      $server['HTTP_' . strtoupper(str_replace('-', '_', $name))] = $value;
+    }
     $request = Request::create(
       $uri,
       $method,
-      server: ['CONTENT_TYPE' => 'application/json'],
+      server: $server,
       content: $payload === NULL ? NULL : json_encode($payload, JSON_THROW_ON_ERROR),
     );
+    if ($session) {
+      $name = $this->container->get('session_configuration')->getOptions($request)['name'];
+      $request->cookies->set($name, 'test-session');
+    }
     /** @var \Symfony\Component\HttpKernel\HttpKernelInterface $kernel */
     $kernel = $this->container->get('http_kernel');
     return $kernel->handle($request);
@@ -196,6 +216,58 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
     $reloaded = $storage->load($this->consumer->id());
     assert($reloaded instanceof Consumer);
     return $provider->getTargets($reloaded);
+  }
+
+  /**
+   * Tests that a PUT with a session cookie needs a valid X-CSRF-Token header.
+   *
+   * Core only checks the header when the request has a session cookie, so
+   * the other tests in this class never reach the check.
+   */
+  public function testSessionPutNeedsCsrfToken(): void {
+    $this->setCurrentUser($this->owner);
+    $uuid = $this->consumer->uuid();
+    $payload = ['targets' => [['label' => 'Staging', 'url' => 'https://stage.example.com/p']]];
+
+    $this->assertSame(403, $this->call('PUT', $payload, $uuid, session: TRUE)->getStatusCode());
+    $this->assertSame(403, $this->call('PUT', $payload, $uuid, ['X-CSRF-Token' => 'wrong'], TRUE)->getStatusCode());
+    $this->assertSame('Local', $this->storedTargets()[0]['label']);
+
+    $token = $this->container->get('csrf_token')->get(CsrfRequestHeaderAccessCheck::TOKEN_KEY);
+    $this->assertSame(200, $this->call('PUT', $payload, $uuid, ['X-CSRF-Token' => $token], TRUE)->getStatusCode());
+    $this->assertSame('Staging', $this->storedTargets()[0]['label']);
+  }
+
+  /**
+   * Tests that a consumer administrator manages any consumer's targets.
+   */
+  public function testAdministratorManagesAnyConsumer(): void {
+    $admin = $this->createUser([
+      'register consumer node preview targets',
+      'administer consumer entities',
+    ]);
+    $this->setCurrentUser($admin);
+
+    $response = $this->call('PUT', [
+      'targets' => [['label' => 'Staging', 'url' => 'https://stage.example.com/p']],
+    ], $this->consumer->uuid());
+    $this->assertSame(200, $response->getStatusCode());
+    $this->assertSame('Staging', $this->storedTargets()[0]['label']);
+  }
+
+  /**
+   * Tests that the X-Consumer-ID header selects a consumer without the query.
+   *
+   * The header only selects. Ownership still decides access.
+   */
+  public function testConsumerIdHeaderSelectsTheConsumer(): void {
+    $this->setCurrentUser($this->owner);
+    $response = $this->call('GET', headers: ['X-Consumer-ID' => 'app']);
+    $this->assertSame(200, $response->getStatusCode());
+    $this->assertSame($this->consumer->uuid(), json_decode((string) $response->getContent(), TRUE)['consumer']);
+
+    $this->setCurrentUser($this->createUser(['register consumer node preview targets']));
+    $this->assertSame(403, $this->call('GET', headers: ['X-Consumer-ID' => 'app'])->getStatusCode());
   }
 
   /**

@@ -27,10 +27,23 @@ class PreviewTargetItem extends FieldItemBase {
   public static function propertyDefinitions(FieldStorageDefinitionInterface $field_definition): array {
     $properties['label'] = DataDefinition::create('string')
       ->setLabel(t('Label'))
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->addConstraint('NotBlank', [
+        'allowNull' => TRUE,
+        'normalizer' => 'trim',
+        'message' => 'A preview target needs a label.',
+      ])
+      ->addConstraint('Length', ['max' => 255]);
     $properties['url'] = DataDefinition::create('string')
       ->setLabel(t('URL template'))
-      ->setRequired(TRUE);
+      ->setRequired(TRUE)
+      ->addConstraint('NotBlank', [
+        'allowNull' => TRUE,
+        'normalizer' => 'trim',
+        'message' => 'A preview target needs a URL.',
+      ])
+      ->addConstraint('Length', ['max' => 2048])
+      ->addConstraint('ConsumerPreviewTargetUrl');
     return $properties;
   }
 
@@ -63,8 +76,15 @@ class PreviewTargetItem extends FieldItemBase {
    * {@inheritdoc}
    */
   public function isEmpty(): bool {
-    $url = $this->get('url')->getValue();
-    return $url === NULL || $url === '';
+    // A row with only a label or only a URL is not empty. Validation reports
+    // the missing half, so the row is not dropped without a word.
+    foreach (['label', 'url'] as $property) {
+      $value = $this->get($property)->getValue();
+      if ($value !== NULL && trim((string) $value) !== '') {
+        return FALSE;
+      }
+    }
+    return TRUE;
   }
 
 }

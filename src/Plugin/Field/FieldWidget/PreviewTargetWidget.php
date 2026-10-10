@@ -7,6 +7,7 @@ namespace Drupal\consumer_node_preview\Plugin\Field\FieldWidget;
 use Drupal\Core\Field\FieldItemListInterface;
 use Drupal\Core\Field\WidgetBase;
 use Drupal\Core\Form\FormStateInterface;
+use Symfony\Component\Validator\ConstraintViolationInterface;
 
 /**
  * Form widget for a preview target.
@@ -50,6 +51,34 @@ class PreviewTargetWidget extends WidgetBase {
       '#maxlength' => 2048,
     ];
     return $element;
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * Trims the label and the URL, as the targets endpoint does. A pasted URL
+   * often starts with a space.
+   */
+  public function massageFormValues(array $values, array $form, FormStateInterface $form_state): array {
+    foreach ($values as &$value) {
+      foreach (['label', 'url'] as $property) {
+        if (isset($value[$property]) && is_string($value[$property])) {
+          $value[$property] = trim($value[$property]);
+        }
+      }
+    }
+    return $values;
+  }
+
+  /**
+   * {@inheritdoc}
+   *
+   * Puts a violation on the label or URL field it is about. The property
+   * path is relative to the field here, for example "0.url".
+   */
+  public function errorElement(array $element, ConstraintViolationInterface $error, array $form, FormStateInterface $form_state): array|bool {
+    $property = explode('.', $error->getPropertyPath())[1] ?? NULL;
+    return is_string($property) && isset($element[$property]) ? $element[$property] : $element;
   }
 
 }

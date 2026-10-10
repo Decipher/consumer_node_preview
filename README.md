@@ -33,7 +33,8 @@ for further information.
 
 - Every consumer gets a **Preview targets** field: a list of label and URL
   pairs. One consumer can hold several targets, for example local, staging
-  and production.
+  and production. A target URL must be absolute and use http or https. The
+  consumer form and the API check the same rule.
 - A URL is a template. It can use two tokens:
   - `[jsonapi_node_preview]`: the absolute URL of the JSON:API preview
     endpoint for the previewed node.

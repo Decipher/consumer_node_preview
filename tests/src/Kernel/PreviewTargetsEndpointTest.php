@@ -209,6 +209,17 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
       'targets' => [['label' => '', 'url' => 'https://ok.example.com/p']],
     ], $uuid)->getStatusCode());
 
+    // A target with neither value is an error. It is not dropped in silence.
+    $this->assertSame(422, $this->call('PUT', [
+      'targets' => [['label' => ' ', 'url' => '']],
+    ], $uuid)->getStatusCode());
+
+    // The message is plain text, with no HTML entities.
+    $response = $this->call('PUT', [
+      'targets' => [['label' => 'Bad', 'url' => 'ftp://example.com/?a=1&b=2']],
+    ], $uuid);
+    $this->assertStringContainsString('ftp://example.com/?a=1&b=2', json_decode((string) $response->getContent(), TRUE)['message']);
+
     $this->assertSame('http://localhost:3000/p', $this->storedTargets()[0]['url']);
   }
 

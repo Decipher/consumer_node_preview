@@ -10,6 +10,9 @@ use Drupal\KernelTests\KernelTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Drupal\Tests\user\Traits\UserCreationTrait;
+use Drupal\user\Entity\Role;
+use Drupal\user\Entity\User;
+use Drupal\user\UserInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -67,8 +70,8 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
     $this->installConfig(['system']);
 
     // The first created user would own uid 1 and bypass access checks.
-    $this->createUser();
-    $this->owner = $this->createUser(['register consumer node preview targets']);
+    $this->account();
+    $this->owner = $this->account(['register consumer node preview targets']);
 
     $this->consumer = Consumer::create([
       'client_id' => 'app',
@@ -79,6 +82,33 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
       ],
     ]);
     $this->consumer->save();
+  }
+
+  /**
+   * Creates an active user with the given permissions.
+   *
+   * The user trait's createUser() returns User|false on Drupal 10 and a user
+   * on Drupal 11. Building the user here gives one type on both versions.
+   *
+   * @param string[] $permissions
+   *   The permissions the user's role grants.
+   */
+  protected function account(array $permissions = []): UserInterface {
+    $role = Role::create([
+      'id' => strtolower($this->randomMachineName()),
+      'label' => $this->randomMachineName(),
+    ]);
+    foreach ($permissions as $permission) {
+      $role->grantPermission($permission);
+    }
+    $role->save();
+    $account = User::create([
+      'name' => $this->randomMachineName(),
+      'status' => 1,
+      'roles' => [$role->id()],
+    ]);
+    $account->save();
+    return $account;
   }
 
   /**
@@ -126,7 +156,7 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
     $this->setUpCurrentUser(['uid' => 0]);
     $this->assertSame(403, $this->call('GET', consumer_uuid: $this->consumer->uuid())->getStatusCode());
 
-    $no_permission = $this->createUser();
+    $no_permission = $this->account();
     $this->setCurrentUser($no_permission);
     $this->assertSame(403, $this->call('GET', consumer_uuid: $this->consumer->uuid())->getStatusCode());
   }
@@ -135,7 +165,7 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
    * Tests that ownership is required on top of the permission.
    */
   public function testOwnershipRequired(): void {
-    $intruder = $this->createUser(['register consumer node preview targets']);
+    $intruder = $this->account(['register consumer node preview targets']);
     $this->setCurrentUser($intruder);
     $response = $this->call('GET', consumer_uuid: $this->consumer->uuid());
     $this->assertSame(403, $response->getStatusCode());
@@ -242,7 +272,7 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
    * Tests that a consumer administrator manages any consumer's targets.
    */
   public function testAdministratorManagesAnyConsumer(): void {
-    $admin = $this->createUser([
+    $admin = $this->account([
       'register consumer node preview targets',
       'administer consumer entities',
     ]);
@@ -266,7 +296,7 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
     $this->assertSame(200, $response->getStatusCode());
     $this->assertSame($this->consumer->uuid(), json_decode((string) $response->getContent(), TRUE)['consumer']);
 
-    $this->setCurrentUser($this->createUser(['register consumer node preview targets']));
+    $this->setCurrentUser($this->account(['register consumer node preview targets']));
     $this->assertSame(403, $this->call('GET', headers: ['X-Consumer-ID' => 'app'])->getStatusCode());
   }
 

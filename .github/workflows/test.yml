@@ -4,11 +4,14 @@ on:
   push:
     tags:
       - '**'
+    # A release line is <major>.x or <major>.<minor>.x, so '*.x' matches
+    # both shapes: * matches dots.
     branches:
-      - 1.0.x
+      - '*.x'
+  # No branch filter on purpose. The filter matches the pull request's base,
+  # so a stacked pull request based on a feature branch would run no jobs at
+  # all, and show no checks rather than failing ones.
   pull_request:
-    branches:
-      - 1.0.x
 
 permissions:
   contents: read

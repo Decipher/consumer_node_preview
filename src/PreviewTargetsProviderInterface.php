@@ -93,7 +93,8 @@ interface PreviewTargetsProviderInterface {
    *
    * @return string
    *   The URL with [jsonapi_node_preview], [jsonapi_node_preview_path],
-   *   [uuid] and [view_mode] replaced.
+   *   [uuid] and [view_mode] replaced. When JSON:API has no preview for the
+   *   node's bundle, the two endpoint tokens stay as they are.
    */
   public function resolveUrl(string $url, NodeInterface $node_preview, string $view_mode_id): string;
 

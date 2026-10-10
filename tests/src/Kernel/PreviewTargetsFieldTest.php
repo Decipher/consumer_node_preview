@@ -253,6 +253,24 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   }
 
   /**
+   * Tests that endpoint tokens stay in the URL when there is no endpoint.
+   *
+   * A visible token is easier to debug than an empty fragment.
+   */
+  public function testEndpointTokensStayWhenThereIsNoEndpoint(): void {
+    // JSON:API has no resource type for a bundle that does not exist.
+    $node = Node::create(['type' => 'missing', 'title' => 'Test']);
+
+    $url = $this->provider->resolveUrl(
+      'http://localhost:3000/p#[jsonapi_node_preview]|[jsonapi_node_preview_path]',
+      $node,
+      'full',
+    );
+
+    $this->assertSame('http://localhost:3000/p#[jsonapi_node_preview]|[jsonapi_node_preview_path]', $url);
+  }
+
+  /**
    * Returns the preview_targets violations of a consumer with one target.
    *
    * @param array{label: string, url: string} $target

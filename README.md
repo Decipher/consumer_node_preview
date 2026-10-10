@@ -83,6 +83,9 @@ A target URL is a template. It can use these tokens:
 - `[uuid]`: the node's UUID, which keys its preview.
 - `[view_mode]`: the view mode being previewed.
 
+When JSON:API has no preview for the node's bundle, the two endpoint tokens
+stay in the URL as they are, so the frontend shows what is missing.
+
 The preview document includes the node's entity reference revisions fields,
 such as paragraphs, and the paragraphs inside those, up to three levels deep.
 So a frontend gets their unsaved values in one request.

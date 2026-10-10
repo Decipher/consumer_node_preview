@@ -147,12 +147,18 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
    * {@inheritdoc}
    */
   public function resolveUrl(string $url, NodeInterface $node_preview, string $view_mode_id): string {
-    return strtr($url, [
-      '[jsonapi_node_preview]' => (string) $this->getEndpoint($node_preview),
-      '[jsonapi_node_preview_path]' => (string) $this->getEndpoint($node_preview, FALSE),
+    $replacements = [
       '[uuid]' => rawurlencode((string) $node_preview->uuid()),
       '[view_mode]' => rawurlencode($view_mode_id),
-    ]);
+    ];
+    // Without an endpoint, the endpoint tokens stay as they are. A visible
+    // token is easier to debug than an empty fragment.
+    $endpoint = $this->getEndpoint($node_preview);
+    if ($endpoint !== NULL) {
+      $replacements['[jsonapi_node_preview]'] = $endpoint;
+      $replacements['[jsonapi_node_preview_path]'] = (string) $this->getEndpoint($node_preview, FALSE);
+    }
+    return strtr($url, $replacements);
   }
 
   /**

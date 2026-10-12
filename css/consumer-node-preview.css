@@ -10,8 +10,19 @@
   --consumer-node-preview-height: calc(100dvh - var(--drupal-displace-offset-top, 0px) - var(--drupal-displace-offset-bottom, 0px) - 8rem);
 }
 
-.consumer-node-preview__tabs {
+/* The tab row: the tabs, then core's View mode select at its end. */
+.consumer-node-preview__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--admin-space-xs, var(--space-xs, 0.5rem)) var(--admin-space-m, var(--space-m, 1rem));
   margin-block-end: var(--admin-space-l, var(--space-l, 1.5rem));
+}
+
+.consumer-node-preview__tabs {
+  flex: 1 1 auto;
+  margin: 0;
 }
 
 /* A clicked tab stays focused. The outline stays for keyboard focus. */
@@ -19,19 +30,31 @@
   outline: 0;
 }
 
-.consumer-node-preview__toolbar {
+/* Themes give core's preview form the whole width of its own bar. */
+.consumer-node-preview__view-mode form {
+  display: block;
+  width: auto;
+}
+
+.consumer-node-preview__view-mode .form-item,
+.consumer-node-preview__controls .form-item {
+  margin: 0;
+}
+
+.consumer-node-preview__controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--admin-space-s, var(--space-s, 0.75rem));
+  gap: var(--admin-space-s, var(--space-s, 0.75rem)) var(--admin-space-l, var(--space-l, 1.5rem));
   margin-block-end: var(--admin-space-s, var(--space-s, 0.75rem));
 }
 
-.consumer-node-preview__target {
+.consumer-node-preview__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--admin-space-xs, var(--space-xs, 0.5rem));
+  gap: var(--admin-space-s, var(--space-s, 0.75rem));
 }
 
 .consumer-node-preview__widths {

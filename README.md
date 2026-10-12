@@ -69,8 +69,10 @@ Content-Type: application/json
 ]}
 ```
 
-Without the `consumer` parameter the consumer is negotiated from the request
-by the Consumers module, for example from the `X-Consumer-ID` header.
+Without the `consumer` parameter, the `X-Consumer-ID` header or a
+`consumerId` query parameter names the consumer by its client id. There is no
+fallback to the site's default consumer: a request that names no consumer, or
+an unknown one, gets a 404.
 
 Access needs all of:
 

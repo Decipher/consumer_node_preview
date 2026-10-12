@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Drupal\Tests\user\Traits\UserCreationTrait;
 use Drupal\user\Entity\Role;
+use Drupal\user\RoleInterface;
 use Drupal\user\Entity\User;
 use Drupal\user\UserInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -112,16 +113,29 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
 
   /**
    * Sends a request to the endpoint and returns the response.
+   *
+   * @param string $method
+   *   The HTTP method.
+   * @param array<string, mixed>|null $payload
+   *   The JSON body, if any.
+   * @param string|null $consumer_uuid
+   *   The consumer query parameter, if any.
+   * @param array<string, string> $headers
+   *   Extra request headers.
    */
-  protected function call(string $method, ?array $payload = NULL, ?string $consumer_uuid = NULL): Response {
+  protected function call(string $method, ?array $payload = NULL, ?string $consumer_uuid = NULL, array $headers = []): Response {
     $uri = '/api/consumer-node-preview/targets';
     if ($consumer_uuid !== NULL) {
       $uri .= '?consumer=' . $consumer_uuid;
     }
+    $server = ['CONTENT_TYPE' => 'application/json'];
+    foreach ($headers as $name => $value) {
+      $server['HTTP_' . strtoupper(str_replace('-', '_', $name))] = $value;
+    }
     $request = Request::create(
       $uri,
       $method,
-      server: ['CONTENT_TYPE' => 'application/json'],
+      server: $server,
       content: $payload === NULL ? NULL : json_encode($payload, JSON_THROW_ON_ERROR),
     );
     /** @var \Symfony\Component\HttpKernel\HttpKernelInterface $kernel */
@@ -245,6 +259,65 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
   public function testUnknownConsumer(): void {
     $this->setCurrentUser($this->owner);
     $this->assertSame(404, $this->call('GET', consumer_uuid: 'ffffffff-ffff-4fff-8fff-ffffffffffff')->getStatusCode());
+  }
+
+  /**
+   * Tests that a request must name its consumer.
+   *
+   * The consumers negotiator would fall back to the default consumer, so a
+   * missing or mistyped X-Consumer-ID header would replace its targets.
+   */
+  public function testNoFallbackToTheDefaultConsumer(): void {
+    $default = Consumer::create([
+      'client_id' => 'default_consumer',
+      'label' => 'Default',
+      'is_default' => TRUE,
+      'owner_id' => $this->owner->id(),
+      'preview_targets' => [['label' => 'Kept', 'url' => 'https://kept.example.com/p']],
+    ]);
+    $default->save();
+    $this->setCurrentUser($this->account([
+      'register consumer node preview targets',
+      'administer consumer entities',
+    ]));
+    $payload = ['targets' => [['label' => 'Lost', 'url' => 'https://lost.example.com/p']]];
+
+    $this->assertSame(404, $this->call('PUT', $payload)->getStatusCode());
+    $this->assertSame(404, $this->call('PUT', $payload, headers: ['X-Consumer-ID' => 'mistyped'])->getStatusCode());
+
+    $storage = $this->container->get('entity_type.manager')->getStorage('consumer');
+    $storage->resetCache([$default->id()]);
+    $reloaded = $storage->load($default->id());
+    $this->assertInstanceOf(Consumer::class, $reloaded);
+    $this->assertSame('Kept', $reloaded->get('preview_targets')->label);
+  }
+
+  /**
+   * Tests that the X-Consumer-ID header names a consumer by its client id.
+   */
+  public function testClientIdNamesTheConsumer(): void {
+    $this->setCurrentUser($this->owner);
+    $response = $this->call('GET', headers: ['X-Consumer-ID' => 'app']);
+    $this->assertSame(200, $response->getStatusCode());
+    $this->assertSame($this->consumer->uuid(), json_decode((string) $response->getContent(), TRUE)['consumer']);
+  }
+
+  /**
+   * Tests that an anonymous user owns no consumer.
+   *
+   * Consumers stores 0 as the owner of a consumer that has none.
+   */
+  public function testAnonymousOwnsNothing(): void {
+    $ownerless = Consumer::create(['client_id' => 'ownerless', 'label' => 'Ownerless']);
+    $ownerless->save();
+    $this->assertSame(0, (int) $ownerless->getOwnerId());
+
+    Role::create(['id' => RoleInterface::ANONYMOUS_ID, 'label' => 'Anonymous user'])
+      ->grantPermission('register consumer node preview targets')
+      ->save();
+    $this->setUpCurrentUser(['uid' => 0]);
+    $this->assertTrue($this->container->get('current_user')->hasPermission('register consumer node preview targets'));
+    $this->assertSame(403, $this->call('GET', consumer_uuid: $ownerless->uuid())->getStatusCode());
   }
 
 }

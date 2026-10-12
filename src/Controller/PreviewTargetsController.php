@@ -6,7 +6,6 @@ namespace Drupal\consumer_node_preview\Controller;
 
 use Drupal\consumer_node_preview\PreviewTargetsProviderInterface;
 use Drupal\consumers\Entity\ConsumerInterface;
-use Drupal\consumers\NegotiatorInterface;
 use Drupal\Component\Render\PlainTextOutput;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
@@ -21,12 +20,12 @@ use Symfony\Component\HttpFoundation\Request;
  * permission. On top of that, this controller only serves a consumer the
  * current user owns, unless the user may administer consumers. The
  * X-Consumer-ID header only selects a consumer. It never grants access,
- * because any client can send any value in it.
+ * because any client can send any value in it. A request must name its
+ * consumer: there is no fallback to the site's default consumer.
  */
 final class PreviewTargetsController extends ControllerBase {
 
   public function __construct(
-    protected NegotiatorInterface $negotiator,
     protected PreviewTargetsProviderInterface $previewTargetsProvider,
     EntityTypeManagerInterface $entity_type_manager,
   ) {
@@ -38,7 +37,6 @@ final class PreviewTargetsController extends ControllerBase {
    */
   public static function create(ContainerInterface $container): static {
     return new self(
-      $container->get('consumer.negotiator'),
       $container->get('consumer_node_preview.targets_provider'),
       $container->get('entity_type.manager'),
     );
@@ -70,20 +68,29 @@ final class PreviewTargetsController extends ControllerBase {
   }
 
   /**
-   * Finds the consumer the request talks about.
+   * Finds the consumer the request names.
    *
-   * A "consumer" query parameter with a uuid wins. Otherwise the consumers
-   * negotiator inspects the request.
+   * A "consumer" query parameter holds a uuid, and wins. Otherwise the
+   * X-Consumer-ID header, or a "consumerId" query parameter, holds a client
+   * id. The consumers negotiator is not used, because it falls back to the
+   * default consumer, and a write must never land on a consumer the request
+   * did not name.
    */
   protected function resolveConsumer(Request $request): ?ConsumerInterface {
     $uuid = $request->query->get('consumer');
     if (is_string($uuid) && $uuid !== '') {
-      $consumers = $this->entityTypeManager->getStorage('consumer')
-        ->loadByProperties(['uuid' => $uuid]);
-      $consumer = reset($consumers);
-      return $consumer instanceof ConsumerInterface ? $consumer : NULL;
+      $properties = ['uuid' => $uuid];
     }
-    return $this->negotiator->negotiateFromRequest($request);
+    else {
+      $client_id = $request->headers->get('X-Consumer-ID') ?: $request->query->get('consumerId');
+      if (!is_string($client_id) || $client_id === '') {
+        return NULL;
+      }
+      $properties = ['client_id' => $client_id];
+    }
+    $consumers = $this->entityTypeManager->getStorage('consumer')->loadByProperties($properties);
+    $consumer = reset($consumers);
+    return $consumer instanceof ConsumerInterface ? $consumer : NULL;
   }
 
   /**
@@ -94,7 +101,9 @@ final class PreviewTargetsController extends ControllerBase {
     if ($account->hasPermission('administer consumer entities')) {
       return TRUE;
     }
-    return (int) $consumer->getOwnerId() === (int) $account->id();
+    // Consumers stores 0 as the owner of a consumer that has none, and an
+    // anonymous user owns nothing.
+    return $account->isAuthenticated() && (int) $consumer->getOwnerId() === (int) $account->id();
   }
 
   /**

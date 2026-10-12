@@ -43,16 +43,27 @@ for further information.
   fetches it over AJAX. Core's preview bar keeps its link back to the edit
   form.
 
-  The screen remembers the editor's last tab, width and frontend. The preview
-  route becomes a node operation, so it uses the admin theme when "Use the
-  administration theme when editing or creating content" is on. The screen
-  uses core's form elements, buttons and tab markup, so the admin theme
-  styles it.
+  The screen remembers the editor's last tab, width, frontend and each
+  frontend's layout. The preview route becomes a node operation, so it uses
+  the admin theme when "Use the administration theme when editing or
+  creating content" is on. The screen uses core's form elements, buttons and
+  tab markup, so the admin theme styles it.
 - **Targets per consumer.** Every consumer gets a **Preview targets** field:
   a list of label and URL pairs, for example local, staging and production.
   A frontend can also register its own targets over the API (see below).
   A consumer's target URL must be absolute and use http or https. The form
   and the API check the same rule.
+- **Layouts per frontend.** A consumer's **Preview layouts** field lists the
+  layouts its frontend can render a preview in, such as `default` and
+  `preview`. When the framed target has layouts, a Layout select shows next
+  to the Frontend picker and fills the `[layout]` token. Changing it reloads
+  only the frame. The frontend maps the name onto its own layouts, and should
+  only accept names it knows.
+
+  The preview opens on the first layout the target lists, so list the
+  default first. The browser remembers the layout an editor picks for each
+  target, and that wins over the first. A `?layout=` query parameter wins
+  over both.
 - **Targets per environment.** settings.php can list targets too, which suits
   a URL that differs per environment and should not travel with a database
   copy:
@@ -62,7 +73,9 @@ for further information.
     'targets' => [
       'frontend' => [
         'label' => 'Frontend',
-        'url' => 'https://www.example.com/node/preview?vm=[view_mode]#[jsonapi_node_preview_path]',
+        'url' => 'https://www.example.com/node/preview?vm=[view_mode]&layout=[layout]#[jsonapi_node_preview_path]',
+        // Optional. The layouts this frontend can render a preview in.
+        'layouts' => ['default', 'preview'],
       ],
     ],
     // Optional. Else the first target opens.
@@ -76,7 +89,8 @@ for further information.
 
   Site targets come first in the picker. A `?frontend=<key>` query parameter
   on the preview URL picks a target, where the key is `settings:<name>` or
-  `<consumer id>:<delta>`.
+  `<consumer id>:<delta>`. A `?layout=<name>` query parameter picks one of
+  that target's layouts.
 
 ## Target URLs
 
@@ -89,6 +103,9 @@ A target URL is a template. It can use these tokens:
   the request needs no CORS.
 - `[uuid]`: the node's UUID, which keys its preview.
 - `[view_mode]`: the view mode being previewed.
+- `[layout]`: the layout picked in the Layout select, or nothing when the
+  target has no layouts. A layout name uses only letters, numbers, `-` and
+  `_`.
 
 When JSON:API has no preview for the node's bundle, the two endpoint tokens
 stay in the URL as they are, so the frontend shows what is missing.
@@ -114,17 +131,24 @@ the scheme. Routers rewrite the URL and can collapse the double slash, so
 
 ## Registering targets over the API
 
-Targets can be managed on the consumer form, or replaced over HTTP:
+Targets and layouts can be managed on the consumer form, or replaced over
+HTTP:
 
 ```
 GET /api/consumer-node-preview/targets?consumer=<uuid>
 PUT /api/consumer-node-preview/targets?consumer=<uuid>
 Content-Type: application/json
 
-{"targets": [
-  {"label": "Local", "url": "http://localhost:3000/node/preview/[view_mode]#[jsonapi_node_preview]"}
-]}
+{
+  "targets": [
+    {"label": "Local", "url": "http://localhost:3000/node/preview/[view_mode]?layout=[layout]#[jsonapi_node_preview]"}
+  ],
+  "layouts": ["default", "preview"]
+}
 ```
+
+`layouts` is optional. A PUT without it keeps the consumer's layouts as they
+are.
 
 Without the `consumer` parameter, the `X-Consumer-ID` header or a
 `consumerId` query parameter names the consumer by its client id. There is no

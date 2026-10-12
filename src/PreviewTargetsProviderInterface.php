@@ -18,6 +18,11 @@ use Drupal\node\NodeInterface;
 interface PreviewTargetsProviderInterface {
 
   /**
+   * The pattern a layout name matches: letters, numbers, - and _.
+   */
+  public const LAYOUT_PATTERN = '/^[A-Za-z0-9_-]+$/D';
+
+  /**
    * Returns the preview targets of one consumer.
    *
    * @param \Drupal\consumers\Entity\ConsumerInterface $consumer
@@ -29,11 +34,23 @@ interface PreviewTargetsProviderInterface {
   public function getTargets(ConsumerInterface $consumer): array;
 
   /**
+   * Returns the layouts one consumer's frontend can render a preview in.
+   *
+   * @param \Drupal\consumers\Entity\ConsumerInterface $consumer
+   *   The consumer.
+   *
+   * @return list<string>
+   *   The layout names, in field order.
+   */
+  public function getLayouts(ConsumerInterface $consumer): array;
+
+  /**
    * Returns every target: the site's first, then each published consumer's.
    *
-   * @return array<string, array{label: string, url: string}>
+   * @return array<string, array{label: string, url: string, layouts: list<string>}>
    *   The targets, keyed "settings:<name>" or "<consumer id>:<delta>". A
-   *   consumer target's label starts with the consumer's label.
+   *   consumer target's label starts with the consumer's label, and its
+   *   layouts are the consumer's. A site target lists its own layouts.
    */
   public function getAllTargets(): array;
 
@@ -51,7 +68,7 @@ interface PreviewTargetsProviderInterface {
    * @param string $key
    *   A key in the form "settings:<name>" or "<consumer id>:<delta>".
    *
-   * @return array{label: string, url: string}|null
+   * @return array{label: string, url: string, layouts: list<string>}|null
    *   The target, or NULL when the key does not resolve.
    */
   public function getTargetByKey(string $key): ?array;
@@ -90,12 +107,14 @@ interface PreviewTargetsProviderInterface {
    *   The node in the preview temp store.
    * @param string $view_mode_id
    *   The view mode.
+   * @param string $layout
+   *   The layout, or an empty string for none.
    *
    * @return string
    *   The URL with [jsonapi_node_preview], [jsonapi_node_preview_path],
-   *   [uuid] and [view_mode] replaced. When JSON:API has no preview for the
-   *   node's bundle, the two endpoint tokens stay as they are.
+   *   [uuid], [view_mode] and [layout] replaced. When JSON:API has no
+   *   preview for the node's bundle, the two endpoint tokens stay as they are.
    */
-  public function resolveUrl(string $url, NodeInterface $node_preview, string $view_mode_id): string;
+  public function resolveUrl(string $url, NodeInterface $node_preview, string $view_mode_id, string $layout = ''): string;
 
 }

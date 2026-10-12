@@ -14,7 +14,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
- * Reads and replaces the preview targets of one consumer.
+ * Reads and replaces the preview targets and layouts of one consumer.
  *
  * The route requires the "register consumer node preview targets"
  * permission. On top of that, this controller only serves a consumer the
@@ -64,6 +64,7 @@ final class PreviewTargetsController extends ControllerBase {
     return new JsonResponse([
       'consumer' => $consumer->uuid(),
       'targets' => $this->previewTargetsProvider->getTargets($consumer),
+      'layouts' => $this->previewTargetsProvider->getLayouts($consumer),
     ]);
   }
 
@@ -109,6 +110,9 @@ final class PreviewTargetsController extends ControllerBase {
   /**
    * Validates the payload and replaces the consumer's targets.
    *
+   * A "layouts" list in the payload replaces the consumer's layouts too.
+   * Without it, the layouts stay as they are.
+   *
    * @return string|null
    *   An error message, or NULL on success.
    */
@@ -133,16 +137,28 @@ final class PreviewTargetsController extends ControllerBase {
       ];
     }
 
-    // The field's constraints hold the rules, so this endpoint and the
-    // consumer form cannot drift apart. Only this field's violations count:
+    $fields = ['preview_targets'];
+    if (array_key_exists('layouts', $decoded)) {
+      $layouts = $decoded['layouts'];
+      if (!is_array($layouts) || !array_is_list($layouts) || array_filter($layouts, is_string(...)) !== $layouts) {
+        return 'The "layouts" value must be a list of layout name strings.';
+      }
+      $consumer->set('preview_layouts', $layouts);
+      $fields[] = 'preview_layouts';
+    }
+
+    // The fields' constraints hold the rules, so this endpoint and the
+    // consumer form cannot drift apart. Only these fields' violations count:
     // a problem elsewhere on the consumer is not this endpoint's to report.
     $consumer->set('preview_targets', $values);
-    $violations = $consumer->validate()->getByField('preview_targets');
-    if (count($violations) > 0) {
-      $messages = [];
-      foreach ($violations as $violation) {
+    $violations = $consumer->validate();
+    $messages = [];
+    foreach ($fields as $field) {
+      foreach ($violations->getByField($field) as $violation) {
         $messages[] = sprintf('%s: %s', $violation->getPropertyPath(), PlainTextOutput::renderFromHtml((string) $violation->getMessage()));
       }
+    }
+    if ($messages) {
       return implode(' ', $messages);
     }
     $consumer->save();

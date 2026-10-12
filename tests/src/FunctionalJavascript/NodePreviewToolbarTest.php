@@ -49,8 +49,17 @@ class NodePreviewToolbarTest extends WebDriverTestBase {
         'consumer_node_preview' => (object) [
           'value' => [
             'targets' => [
-              'one' => ['label' => 'One', 'url' => '/frontend-one?vm=[view_mode]#[jsonapi_node_preview_path]'],
+              'one' => [
+                'label' => 'One',
+                'url' => '/frontend-one?vm=[view_mode]&layout=[layout]#[jsonapi_node_preview_path]',
+                'layouts' => ['default', 'bare_page'],
+              ],
               'two' => ['label' => 'Two', 'url' => '/frontend-two?vm=[view_mode]'],
+              'three' => [
+                'label' => 'Three',
+                'url' => '/frontend-three?vm=[view_mode]&layout=[layout]',
+                'layouts' => ['default', 'bare_page'],
+              ],
             ],
             'default' => 'settings:one',
           ],
@@ -147,6 +156,63 @@ class NodePreviewToolbarTest extends WebDriverTestBase {
     $this->assertNotNull($assert->waitForElementVisible('css', '[data-consumer-node-preview-open]'));
     $page->clickLink('Open in new tab');
     $this->assertFalse($this->getSession()->wait(1000, "!!document.querySelector('.ui-dialog')"), 'Core asked before leaving the preview.');
+  }
+
+  /**
+   * Tests the layout picker, which follows the framed frontend.
+   */
+  public function testLayoutFollowsTheFrontend(): void {
+    $this->preview();
+    $assert = $this->jsAssert();
+    $layouts = $assert->elementExists('css', '[data-consumer-node-preview-layout]');
+    $targets = $assert->elementExists('css', '[data-consumer-node-preview-target]');
+    $this->assertTrue($layouts->isVisible());
+    $this->assertStringContainsString('layout=default', $this->frameSource());
+
+    $this->getSession()->executeScript('window.consumerNodePreviewTest = true;');
+    $layouts->selectOption('Bare page');
+    $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="layout=bare_page"]'));
+    $this->assertStringContainsString('layout=bare_page', (string) $assert->elementExists('css', '[data-consumer-node-preview-open]')->getAttribute('href'));
+
+    // A frontend without layouts hides the picker.
+    $targets->selectOption('Two');
+    $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="/frontend-two"]'));
+    $this->assertFalse($layouts->isVisible());
+
+    // Back on One, the picker shows One's layout again.
+    $targets->selectOption('One');
+    $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="layout=bare_page"]'));
+    $this->assertTrue($layouts->isVisible());
+    $this->assertSame('bare_page', $layouts->getValue());
+    $this->assertTrue($this->getSession()->evaluateScript('window.consumerNodePreviewTest === true'), 'The layout change reloaded the page.');
+
+    // A reload keeps the layout.
+    $this->getSession()->reload();
+    $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="layout=bare_page"]'));
+  }
+
+  /**
+   * Tests that a layout in the URL wins, and an unlisted one is ignored.
+   */
+  public function testTheUrlLayoutWins(): void {
+    $this->preview();
+    $assert = $this->jsAssert();
+    $page_url = strtok($this->getSession()->getCurrentUrl(), '?');
+
+    // One is the default. Remember bare_page for it, then ask for a layout
+    // it does not list: the remembered layout stays.
+    $assert->elementExists('css', '[data-consumer-node-preview-layout]')->selectOption('Bare page');
+    $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="/frontend-one"][src*="layout=bare_page"]'));
+    $this->getSession()->visit($page_url . '?layout=nope');
+    $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="/frontend-one"][src*="layout=bare_page"]'));
+
+    // Remember Three with its default layout. The server still opens One,
+    // so the layout in the URL must reach the remembered Three.
+    $assert->elementExists('css', '[data-consumer-node-preview-target]')->selectOption('Three');
+    $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="/frontend-three"][src*="layout=default"]'));
+    $this->getSession()->visit($page_url . '?layout=bare_page');
+    $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="/frontend-three"][src*="layout=bare_page"]'));
+    $this->assertSame('bare_page', $assert->elementExists('css', '[data-consumer-node-preview-layout]')->getValue());
   }
 
   /**

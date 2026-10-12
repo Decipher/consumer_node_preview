@@ -41,6 +41,11 @@ final class NodePreviewController extends CoreNodePreviewController {
   public const VIEW_MODE_PLACEHOLDER = '__consumer_node_preview_view_mode__';
 
   /**
+   * Stands in for the layout in URLs that the page's script completes.
+   */
+  public const LAYOUT_PLACEHOLDER = '__consumer_node_preview_layout__';
+
+  /**
    * The preview targets provider.
    */
   protected PreviewTargetsProviderInterface $targetsProvider;
@@ -107,26 +112,53 @@ final class NodePreviewController extends CoreNodePreviewController {
     }
 
     assert($node_preview instanceof NodeInterface);
+    $all = $this->targetsProvider->getAllTargets();
+    $query = $this->requestStack->getCurrentRequest()?->query;
+    $requested = $query?->get('frontend');
+    $active = is_string($requested) && isset($all[$requested]) ? $requested : $this->targetsProvider->getDefaultKey();
+    if ($active === NULL || !isset($all[$active])) {
+      $active = array_key_first($all);
+    }
+
+    // A target opens on its first layout. The framed one can take the
+    // layout in the query instead, when the target lists it.
+    $requested_layout = $query?->get('layout');
+    $layout = '';
     $targets = [];
     $templates = [];
-    foreach ($this->targetsProvider->getAllTargets() as $key => $target) {
-      $template = UrlHelper::stripDangerousProtocols($this->targetsProvider->resolveUrl($target['url'], $node_preview, self::VIEW_MODE_PLACEHOLDER));
-      $templates[$key] = ['label' => $target['label'], 'url' => $template];
+    foreach ($all as $key => $target) {
+      $template = UrlHelper::stripDangerousProtocols($this->targetsProvider->resolveUrl($target['url'], $node_preview, self::VIEW_MODE_PLACEHOLDER, self::LAYOUT_PLACEHOLDER));
+      // A URL without the [layout] token cannot change layout, so its target
+      // gets no Layout select.
+      if (!str_contains($template, self::LAYOUT_PLACEHOLDER)) {
+        $target['layouts'] = [];
+      }
+      $target_layout = $target['layouts'][0] ?? '';
+      if ((string) $key === (string) $active) {
+        $layout = is_string($requested_layout) && in_array($requested_layout, $target['layouts'], TRUE) ? $requested_layout : $target_layout;
+        $target_layout = $layout;
+      }
+      $templates[$key] = [
+        'label' => $target['label'],
+        'url' => $template,
+        'layouts' => array_map(fn(string $name): array => ['name' => $name, 'label' => self::layoutLabel($name)], $target['layouts']),
+      ];
       $targets[$key] = [
         'label' => $target['label'],
-        'url' => str_replace(self::VIEW_MODE_PLACEHOLDER, rawurlencode($view_mode_id), $template),
+        'url' => strtr($template, [
+          self::VIEW_MODE_PLACEHOLDER => rawurlencode($view_mode_id),
+          self::LAYOUT_PLACEHOLDER => rawurlencode($target_layout),
+        ]),
+        'layouts' => $target['layouts'],
       ];
-    }
-    $requested = $this->requestStack->getCurrentRequest()?->query->get('frontend');
-    $active = is_string($requested) && isset($targets[$requested]) ? $requested : $this->targetsProvider->getDefaultKey();
-    if ($active === NULL || !isset($targets[$active])) {
-      $active = array_key_first($targets);
     }
 
     $parameters = ['node_preview' => $node_preview->uuid(), 'view_mode_id' => self::VIEW_MODE_PLACEHOLDER];
     $attached['drupalSettings']['consumerNodePreview'] = [
       'placeholder' => self::VIEW_MODE_PLACEHOLDER,
       'viewMode' => $view_mode_id,
+      'layoutPlaceholder' => self::LAYOUT_PLACEHOLDER,
+      'layout' => $layout,
       'active' => $active,
       'targets' => $templates,
       'previewUrl' => Url::fromRoute('entity.node.preview', $parameters)->toString(),
@@ -139,6 +171,7 @@ final class NodePreviewController extends CoreNodePreviewController {
       '#drupal' => $drupal,
       '#view_mode' => $this->viewModeForm($node_preview),
       '#frontend' => $targets ? $this->frontendSelect($targets, (string) $active) : [],
+      '#layout' => $this->layoutSelect($targets, (string) $active, $layout),
       '#targets' => $targets,
       '#active_target' => $active,
       '#jsonapi_url' => $this->targetsProvider->getEndpoint($node_preview, FALSE),
@@ -191,7 +224,7 @@ final class NodePreviewController extends CoreNodePreviewController {
    *
    * It shows even with one target, so the editor sees which one is framed.
    *
-   * @param array<string, array{label: string, url: string}> $targets
+   * @param array<string, array{label: string, url: string, layouts: list<string>}> $targets
    *   The targets, keyed by target key.
    * @param string $active
    *   The key of the framed target.
@@ -210,6 +243,50 @@ final class NodePreviewController extends CoreNodePreviewController {
       '#attributes' => ['data-consumer-node-preview-target' => ''],
       '#wrapper_attributes' => ['class' => ['container-inline']],
     ];
+  }
+
+  /**
+   * Builds the layout picker, with the framed target's layouts.
+   *
+   * It is left out when no target has layouts. It is hidden while the framed
+   * target has none, and the page's script fills it for the target picked.
+   *
+   * @param array<string, array{label: string, url: string, layouts: list<string>}> $targets
+   *   The targets, keyed by target key.
+   * @param string $active
+   *   The key of the framed target.
+   * @param string $layout
+   *   The framed target's layout.
+   *
+   * @return array<string, mixed>
+   *   The select element, or an empty array.
+   */
+  protected function layoutSelect(array $targets, string $active, string $layout): array {
+    if (!array_filter($targets, fn(array $target): bool => $target['layouts'] !== [])) {
+      return [];
+    }
+    $layouts = $targets[$active]['layouts'] ?? [];
+    $select = [
+      '#type' => 'select',
+      '#title' => $this->t('Layout'),
+      '#options' => array_combine($layouts, array_map(self::layoutLabel(...), $layouts)),
+      '#value' => $layout,
+      '#name' => 'layout',
+      '#id' => 'consumer-node-preview-layout',
+      '#attributes' => ['data-consumer-node-preview-layout' => ''],
+      '#wrapper_attributes' => ['class' => ['container-inline']],
+    ];
+    if ($layouts === []) {
+      $select['#wrapper_attributes']['hidden'] = TRUE;
+    }
+    return $select;
+  }
+
+  /**
+   * Returns a layout name as a label: "bare_page" becomes "Bare page".
+   */
+  protected static function layoutLabel(string $name): string {
+    return ucfirst(str_replace(['-', '_'], ' ', $name));
   }
 
   /**

@@ -364,6 +364,96 @@ class NodePreviewControllerTest extends KernelTestBase {
   }
 
   /**
+   * Tests that the Layout select lists the framed target's layouts.
+   */
+  public function testTheLayoutSelectFollowsTheTarget(): void {
+    $this->setSetting('consumer_node_preview', [
+      'targets' => [
+        'site' => ['label' => 'Site', 'url' => 'http://localhost:3000/[uuid]?layout=[layout]', 'layouts' => ['default', 'bare_page']],
+        'plain' => ['label' => 'Plain', 'url' => 'https://example.com/[uuid]'],
+      ],
+      'default' => 'settings:site',
+    ]);
+    $node = $this->node();
+    $build = $this->preview($node);
+    $html = (string) $this->render($build);
+
+    $this->assertStringContainsString('<iframe src="http://localhost:3000/' . $node->uuid() . '?layout=default"', $html);
+    $this->assertStringContainsString('data-consumer-node-preview-layout', $html);
+    $this->assertStringContainsString('<option value="bare_page">Bare page</option>', $html);
+
+    $settings = $build['#attached']['drupalSettings']['consumerNodePreview'];
+    $this->assertSame('default', $settings['layout']);
+    $this->assertSame(NodePreviewController::LAYOUT_PLACEHOLDER, $settings['layoutPlaceholder']);
+    $this->assertSame('http://localhost:3000/' . $node->uuid() . '?layout=' . NodePreviewController::LAYOUT_PLACEHOLDER, $settings['targets']['settings:site']['url']);
+    $this->assertSame([
+      ['name' => 'default', 'label' => 'Default'],
+      ['name' => 'bare_page', 'label' => 'Bare page'],
+    ], $settings['targets']['settings:site']['layouts']);
+    $this->assertSame([], $settings['targets']['settings:plain']['layouts']);
+  }
+
+  /**
+   * Tests that the query picks a layout the target lists, and only that.
+   */
+  public function testTheQueryPicksTheLayout(): void {
+    $this->setSetting('consumer_node_preview', [
+      'targets' => [
+        'site' => ['label' => 'Site', 'url' => 'http://localhost:3000/?layout=[layout]', 'layouts' => ['default', 'preview']],
+      ],
+    ]);
+    foreach (['preview' => 'preview', 'bogus' => 'default'] as $requested => $expected) {
+      $request = Request::create('/', 'GET', ['layout' => $requested]);
+      $request->setSession(new Session(new MockArraySessionStorage()));
+      $this->container->get('request_stack')->push($request);
+      $this->assertStringContainsString('<iframe src="http://localhost:3000/?layout=' . $expected . '"', $this->html());
+    }
+  }
+
+  /**
+   * Tests that the Layout select is left out when no target has layouts.
+   */
+  public function testNoLayoutsNoLayoutSelect(): void {
+    $this->setSetting('consumer_node_preview', [
+      'targets' => ['plain' => ['label' => 'Plain', 'url' => 'https://example.com/[uuid]?layout=[layout]']],
+    ]);
+    $node = $this->node();
+    $html = $this->html($node);
+    $this->assertStringNotContainsString('data-consumer-node-preview-layout', $html);
+    $this->assertStringContainsString('<iframe src="https://example.com/' . $node->uuid() . '?layout="', $html);
+  }
+
+  /**
+   * Tests that a target URL without the [layout] token gets no layouts.
+   */
+  public function testTargetWithoutTheTokenGetsNoLayouts(): void {
+    $this->setSetting('consumer_node_preview', [
+      'targets' => ['site' => ['label' => 'Site', 'url' => 'https://example.com/[uuid]', 'layouts' => ['default', 'preview']]],
+    ]);
+    $build = $this->preview();
+    $this->assertSame([], $build['#attached']['drupalSettings']['consumerNodePreview']['targets']['settings:site']['layouts']);
+    $this->assertStringNotContainsString('data-consumer-node-preview-layout', (string) $this->render($build));
+  }
+
+  /**
+   * Tests that the Layout select starts hidden on a target without layouts.
+   *
+   * It is still on the page, for the targets that have some.
+   */
+  public function testTheLayoutSelectStartsHiddenWithoutLayouts(): void {
+    $this->setSetting('consumer_node_preview', [
+      'targets' => [
+        'plain' => ['label' => 'Plain', 'url' => 'https://example.com/[uuid]'],
+        'site' => ['label' => 'Site', 'url' => 'https://example.com/[uuid]?layout=[layout]', 'layouts' => ['default']],
+      ],
+      'default' => 'settings:plain',
+    ]);
+    $html = $this->html();
+    $this->assertStringContainsString('data-consumer-node-preview-layout', $html);
+    $this->assertMatchesRegularExpression('/<div[^>]*\shidden[^>]*>(?:(?!<\/div>).)*data-consumer-node-preview-layout/s', $html);
+  }
+
+  /**
    * Builds core's preview bar the way core attaches it.
    *
    * @return array<string, mixed>

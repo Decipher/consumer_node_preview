@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\consumer_node_preview\Kernel;
 
 use Drupal\consumers\Entity\Consumer;
+use Drupal\Core\Access\CsrfRequestHeaderAccessCheck;
 use Drupal\KernelTests\KernelTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -122,8 +123,10 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
    *   The consumer query parameter, if any.
    * @param array<string, string> $headers
    *   Extra request headers.
+   * @param bool $session
+   *   TRUE to send a session cookie, as a browser does after sign-in.
    */
-  protected function call(string $method, ?array $payload = NULL, ?string $consumer_uuid = NULL, array $headers = []): Response {
+  protected function call(string $method, ?array $payload = NULL, ?string $consumer_uuid = NULL, array $headers = [], bool $session = FALSE): Response {
     $uri = '/api/consumer-node-preview/targets';
     if ($consumer_uuid !== NULL) {
       $uri .= '?consumer=' . $consumer_uuid;
@@ -138,6 +141,10 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
       server: $server,
       content: $payload === NULL ? NULL : json_encode($payload, JSON_THROW_ON_ERROR),
     );
+    if ($session) {
+      $name = $this->container->get('session_configuration')->getOptions($request)['name'];
+      $request->cookies->set($name, 'test-session');
+    }
     /** @var \Symfony\Component\HttpKernel\HttpKernelInterface $kernel */
     $kernel = $this->container->get('http_kernel');
     return $kernel->handle($request);
@@ -207,6 +214,12 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
     // Not a targets list.
     $this->assertSame(422, $this->call('PUT', ['nope' => TRUE], $uuid)->getStatusCode());
 
+    // A target that is not an object, or has a value that is not a string.
+    $this->assertSame(422, $this->call('PUT', ['targets' => ['https://ok.example.com/p']], $uuid)->getStatusCode());
+    $this->assertSame(422, $this->call('PUT', [
+      'targets' => [['label' => 'Bad', 'url' => ['https://ok.example.com/p']]],
+    ], $uuid)->getStatusCode());
+
     // A scheme an iframe must never get.
     $response = $this->call('PUT', [
       'targets' => [['label' => 'Bad', 'url' => 'javascript:alert(1)']],
@@ -251,6 +264,53 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
     $reloaded = $storage->load($this->consumer->id());
     assert($reloaded instanceof Consumer);
     return $provider->getTargets($reloaded);
+  }
+
+  /**
+   * Tests that a PUT with a session cookie needs a valid X-CSRF-Token header.
+   *
+   * Core only checks the header when the request has a session cookie, so
+   * the other tests in this class never reach the check.
+   */
+  public function testSessionPutNeedsCsrfToken(): void {
+    $this->setCurrentUser($this->owner);
+    $uuid = $this->consumer->uuid();
+    $payload = ['targets' => [['label' => 'Staging', 'url' => 'https://stage.example.com/p']]];
+
+    $this->assertSame(403, $this->call('PUT', $payload, $uuid, session: TRUE)->getStatusCode());
+    $this->assertSame(403, $this->call('PUT', $payload, $uuid, ['X-CSRF-Token' => 'wrong'], TRUE)->getStatusCode());
+    $this->assertSame('Local', $this->storedTargets()[0]['label']);
+
+    $token = $this->container->get('csrf_token')->get(CsrfRequestHeaderAccessCheck::TOKEN_KEY);
+    $this->assertSame(200, $this->call('PUT', $payload, $uuid, ['X-CSRF-Token' => $token], TRUE)->getStatusCode());
+    $this->assertSame('Staging', $this->storedTargets()[0]['label']);
+  }
+
+  /**
+   * Tests that a consumer administrator manages any consumer's targets.
+   */
+  public function testAdministratorManagesAnyConsumer(): void {
+    $admin = $this->account([
+      'register consumer node preview targets',
+      'administer consumer entities',
+    ]);
+    $this->setCurrentUser($admin);
+
+    $response = $this->call('PUT', [
+      'targets' => [['label' => 'Staging', 'url' => 'https://stage.example.com/p']],
+    ], $this->consumer->uuid());
+    $this->assertSame(200, $response->getStatusCode());
+    $this->assertSame('Staging', $this->storedTargets()[0]['label']);
+  }
+
+  /**
+   * Tests that the X-Consumer-ID header selects, but never grants access.
+   *
+   * Any client can send any value in the header.
+   */
+  public function testConsumerIdHeaderGrantsNothing(): void {
+    $this->setCurrentUser($this->account(['register consumer node preview targets']));
+    $this->assertSame(403, $this->call('GET', headers: ['X-Consumer-ID' => 'app'])->getStatusCode());
   }
 
   /**

@@ -195,6 +195,29 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   }
 
   /**
+   * Tests that the widget shows a label and a URL field for each target.
+   */
+  public function testWidgetShowsLabelAndUrl(): void {
+    $widget = $this->container->get('entity_display.repository')
+      ->getFormDisplay('consumer', 'consumer')
+      ->getRenderer('preview_targets');
+    $this->assertInstanceOf(PreviewTargetWidget::class, $widget);
+    $consumer = $this->createConsumer('App', [
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p'],
+    ]);
+    $form = ['#parents' => []];
+    $element = $widget->form($consumer->get('preview_targets'), $form, new FormState())['widget'];
+
+    $this->assertSame('Local', $element[0]['label']['#default_value']);
+    $this->assertSame('http://localhost:3000/p', $element[0]['url']['#default_value']);
+    $this->assertSame(2048, $element[0]['url']['#maxlength']);
+    $this->assertStringContainsString('[jsonapi_node_preview]', (string) $element[0]['url']['#description']);
+    // The field has unlimited values, so an empty row follows the target.
+    $this->assertSame('', $element[1]['label']['#default_value']);
+    $this->assertSame('', $element[1]['url']['#default_value']);
+  }
+
+  /**
    * Returns the preview_targets violations of a consumer with one target.
    *
    * @param array{label: string, url: string} $target

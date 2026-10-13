@@ -8,6 +8,8 @@ Built for decoupled sites that serve unsaved previews through
 with consumers from the
 [Consumers](https://www.drupal.org/project/consumers) module.
 
+![Drupal's node preview screen. The Frontend tab frames the unsaved page in a decoupled frontend, below the Frontend and Layout selects and the Phone, Tablet and Full width buttons.](docs/images/preview-screen.png)
+
 - Project page: <https://www.drupal.org/project/consumer_node_preview>
 - Issue queue: <https://www.drupal.org/project/issues/consumer_node_preview>
 

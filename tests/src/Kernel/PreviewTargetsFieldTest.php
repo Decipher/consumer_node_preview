@@ -218,6 +218,23 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   }
 
   /**
+   * Tests that the key of an unpublished consumer's target does not resolve.
+   *
+   * The picker lists published consumers only, so a key must agree.
+   */
+  public function testUnpublishedConsumerKeyDoesNotResolve(): void {
+    $consumer = $this->createConsumer('Hidden', [
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p'],
+    ]);
+    $key = $consumer->id() . ':0';
+    $this->assertNotNull($this->provider->getTargetByKey($key));
+
+    $consumer->set('status', FALSE)->save();
+    $this->assertArrayNotHasKey($key, $this->provider->getTargetOptions());
+    $this->assertNull($this->provider->getTargetByKey($key));
+  }
+
+  /**
    * Returns the preview_targets violations of a consumer with one target.
    *
    * @param array{label: string, url: string} $target

@@ -9,17 +9,35 @@
 /* eslint-env jest */
 
 const VIEW_MODE = '__consumer_node_preview_view_mode__';
+const LAYOUT = '__consumer_node_preview_layout__';
 
 const TARGETS = [
   { key: 'settings:one', label: 'One', url: `/one?mode=${VIEW_MODE}` },
   { key: 'settings:two', label: 'Two', url: `/two?mode=${VIEW_MODE}` },
 ];
 
+// One and Three list layouts. Two has no [layout] token, so it lists none.
+const LAYOUT_TARGETS = [
+  {
+    key: 'settings:one',
+    label: 'One',
+    url: `/one?mode=${VIEW_MODE}&layout=${LAYOUT}`,
+    layouts: ['default', 'bare_page', 'wide'],
+  },
+  TARGETS[1],
+  {
+    key: 'settings:three',
+    label: 'Three',
+    url: `/three?mode=${VIEW_MODE}&layout=${LAYOUT}`,
+    layouts: ['default', 'wide'],
+  },
+];
+
 /**
  * Returns the page's settings, as the controller attaches them.
  *
  * @param {Array} targets
- *   The frontend targets, with key, label and url.
+ *   The frontend targets, with key, label, url and layouts.
  *
  * @return {object}
  *   The consumerNodePreview settings.
@@ -27,9 +45,21 @@ const TARGETS = [
 const settings = (targets) => ({
   placeholder: VIEW_MODE,
   viewMode: 'full',
+  layoutPlaceholder: LAYOUT,
+  layout: (targets.length && (targets[0].layouts || [])[0]) || '',
   active: targets.length ? targets[0].key : null,
   targets: Object.fromEntries(
-    targets.map((each) => [each.key, { label: each.label, url: each.url }]),
+    targets.map((each) => [
+      each.key,
+      {
+        label: each.label,
+        url: each.url,
+        layouts: (each.layouts || []).map((name) => ({
+          name,
+          label: name.toUpperCase(),
+        })),
+      },
+    ]),
   ),
   previewUrl: `/node/preview/uuid/${VIEW_MODE}`,
   drupalUrl: `/node/preview/uuid/${VIEW_MODE}/drupal`,
@@ -49,6 +79,22 @@ const settings = (targets) => ({
 const url = (name, viewMode = 'full') => `/${name}?mode=${viewMode}`;
 
 /**
+ * Completes a target's URL for a layout.
+ *
+ * @param {string} name
+ *   The target's name, one or three.
+ * @param {string} layout
+ *   The layout.
+ * @param {string} [viewMode]
+ *   The view mode.
+ *
+ * @return {string}
+ *   The URL.
+ */
+const at = (name, layout, viewMode = 'full') =>
+  `/${name}?mode=${viewMode}&layout=${layout}`;
+
+/**
  * Returns the preview markup.
  *
  * @param {object} [options]
@@ -59,6 +105,9 @@ const url = (name, viewMode = 'full') => `/${name}?mode=${viewMode}`;
  *   The JSON:API URL, or an empty string for a bundle without one.
  * @param {string} [options.active]
  *   The tab the page opens on.
+ * @param {boolean} [options.formItem]
+ *   Whether the layout picker sits in a form item wrapper, as in core's
+ *   themes.
  *
  * @return {string}
  *   The HTML.
@@ -67,6 +116,7 @@ const markup = ({
   targets = TARGETS,
   jsonapi = '/jsonapi/node/page/uuid/preview',
   active = 'frontend',
+  formItem = true,
 } = {}) => {
   const tab = (id, label) => `
     <li class="tabs__tab${id === active ? ' is-active' : ''}" role="presentation">
@@ -89,9 +139,19 @@ const markup = ({
         `<button type="button" aria-pressed="${width === '100%'}" data-consumer-node-preview-width="${width}">${width}</button>`,
     )
     .join('');
-  const first = targets.length && targets[0].url.replace(VIEW_MODE, 'full');
+  const layouts = (targets.length && targets[0].layouts) || [];
+  const layoutPicker = targets.some((each) => each.layouts)
+    ? `<div class="${formItem ? 'js-form-item' : ''}"${layouts.length ? '' : ' hidden'}>
+        <select data-consumer-node-preview-layout>${layouts
+          .map((name) => `<option value="${name}">${name}</option>`)
+          .join('')}</select>
+      </div>`
+    : '';
+  const first =
+    targets.length &&
+    targets[0].url.replace(VIEW_MODE, 'full').replace(LAYOUT, layouts[0]);
   const frontend = targets.length
-    ? `${picker}${widths}
+    ? `${picker}${layoutPicker}${widths}
       <a href="${first}" target="_blank" data-consumer-node-preview-open>Open</a>
       <div data-consumer-node-preview-viewport>
         <iframe src="${first}" data-consumer-node-preview-frame></iframe>
@@ -526,6 +586,145 @@ describe('Drupal.behaviors.consumerNodePreview', () => {
       attach({ active: 'drupal', settings: { drupalUrl: null } });
       viewMode('teaser');
       expect(Drupal.ajax).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('layouts', () => {
+    const layouts = () =>
+      document.querySelector('[data-consumer-node-preview-layout]');
+    const listed = () =>
+      Array.from(layouts().options).map((option) => option.value);
+    const shown = () => !layouts().parentElement.hidden;
+    const layout = (value) => choose(layouts(), value);
+
+    it("frames a target on its first layout and lists the target's layouts", () => {
+      attach({ targets: LAYOUT_TARGETS });
+      expect(frame().getAttribute('src')).toBe(at('one', 'default'));
+      expect(listed()).toEqual(['default', 'bare_page', 'wide']);
+      expect(layouts().options[1].textContent).toBe('BARE_PAGE');
+      expect(layouts().value).toBe('default');
+      expect(shown()).toBe(true);
+    });
+
+    it('switches layout without a reload and remembers it per target', () => {
+      attach({ targets: LAYOUT_TARGETS });
+      layout('bare_page');
+      expect(frame().getAttribute('src')).toBe(at('one', 'bare_page'));
+      expect(open().getAttribute('href')).toBe(at('one', 'bare_page'));
+      expect(
+        window.localStorage.getItem(
+          'consumer_node_preview.layout.settings:one',
+        ),
+      ).toBe('bare_page');
+    });
+
+    it('hides for a target without layouts and comes back with the remembered one', () => {
+      attach({ targets: LAYOUT_TARGETS });
+      layout('bare_page');
+      pick('settings:two');
+      expect(frame().getAttribute('src')).toBe(url('two'));
+      expect(listed()).toEqual([]);
+      expect(shown()).toBe(false);
+      pick('settings:three');
+      expect(frame().getAttribute('src')).toBe(at('three', 'default'));
+      expect(listed()).toEqual(['default', 'wide']);
+      pick('settings:one');
+      expect(frame().getAttribute('src')).toBe(at('one', 'bare_page'));
+      expect(layouts().value).toBe('bare_page');
+      expect(shown()).toBe(true);
+    });
+
+    it('opens on the remembered layout', () => {
+      window.localStorage.setItem(
+        'consumer_node_preview.layout.settings:one',
+        'wide',
+      );
+      attach({ targets: LAYOUT_TARGETS });
+      expect(frame().getAttribute('src')).toBe(at('one', 'wide'));
+      expect(layouts().value).toBe('wide');
+    });
+
+    it('opens on the first layout when the remembered one is no longer listed', () => {
+      window.localStorage.setItem(
+        'consumer_node_preview.layout.settings:one',
+        'gone',
+      );
+      attach({ targets: LAYOUT_TARGETS });
+      expect(frame().getAttribute('src')).toBe(at('one', 'default'));
+    });
+
+    it('lets a listed layout in the URL win once, without remembering it', () => {
+      window.localStorage.setItem(
+        'consumer_node_preview.layout.settings:one',
+        'bare_page',
+      );
+      window.history.replaceState(null, '', '/?layout=wide');
+      attach({ targets: LAYOUT_TARGETS });
+      expect(frame().getAttribute('src')).toBe(at('one', 'wide'));
+      pick('settings:two');
+      pick('settings:one');
+      expect(frame().getAttribute('src')).toBe(at('one', 'bare_page'));
+    });
+
+    it('ignores a layout in the URL that the target does not list', () => {
+      window.localStorage.setItem(
+        'consumer_node_preview.layout.settings:one',
+        'bare_page',
+      );
+      window.history.replaceState(null, '', '/?layout=nope');
+      attach({ targets: LAYOUT_TARGETS });
+      expect(frame().getAttribute('src')).toBe(at('one', 'bare_page'));
+    });
+
+    it('gives the layout in the URL to a remembered target', () => {
+      window.localStorage.setItem(
+        'consumer_node_preview.target',
+        'settings:three',
+      );
+      window.history.replaceState(null, '', '/?layout=wide');
+      attach({ targets: LAYOUT_TARGETS });
+      expect(frame().getAttribute('src')).toBe(at('three', 'wide'));
+      expect(listed()).toEqual(['default', 'wide']);
+      expect(layouts().value).toBe('wide');
+    });
+
+    it('keeps the layout when the view mode changes', () => {
+      attach({ targets: LAYOUT_TARGETS });
+      layout('wide');
+      viewMode('teaser');
+      expect(frame().getAttribute('src')).toBe(at('one', 'wide', 'teaser'));
+    });
+
+    it('hides its own parent outside a form item', () => {
+      attach({ targets: LAYOUT_TARGETS, formItem: false });
+      pick('settings:two');
+      expect(shown()).toBe(false);
+    });
+
+    it('switches layout when the browser blocks storage', () => {
+      jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        throw new Error('Blocked');
+      });
+      jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('Blocked');
+      });
+      attach({ targets: LAYOUT_TARGETS });
+      layout('wide');
+      expect(frame().getAttribute('src')).toBe(at('one', 'wide'));
+      viewMode('teaser');
+      expect(frame().getAttribute('src')).toBe(at('one', 'wide', 'teaser'));
+    });
+
+    it('encodes the layout in the URL', () => {
+      const targets = [{ ...LAYOUT_TARGETS[0], layouts: ['a&b c'] }];
+      attach({ targets });
+      expect(frame().getAttribute('src')).toBe(at('one', 'a%26b%20c'));
+    });
+
+    it('is absent when no target lists layouts', () => {
+      attach();
+      expect(layouts()).toBe(null);
+      expect(frame().getAttribute('src')).toBe(url('one'));
     });
   });
 

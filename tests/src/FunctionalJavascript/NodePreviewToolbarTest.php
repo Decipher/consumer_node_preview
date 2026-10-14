@@ -5,9 +5,6 @@ declare(strict_types=1);
 namespace Drupal\Tests\consumer_node_preview\FunctionalJavascript;
 
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
-use Drupal\FunctionalJavascriptTests\WebDriverWebAssert;
-use WebDriver\Service\CurlService;
-use WebDriver\ServiceFactory;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -21,6 +18,8 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 #[Group('consumer_node_preview')]
 #[RunTestsInSeparateProcesses]
 class NodePreviewToolbarTest extends WebDriverTestBase {
+
+  use PreviewBrowserTestTrait;
 
   /**
    * {@inheritdoc}
@@ -60,20 +59,6 @@ class NodePreviewToolbarTest extends WebDriverTestBase {
       ],
     ]);
     $this->drupalLogin($this->rootUser);
-  }
-
-  /**
-   * {@inheritdoc}
-   *
-   * Drupal 10's driver sends its requests through core's
-   * WebDriverCurlService, and current ChromeDriver answers those with a 400.
-   * Drupal 11 uses the WebDriver library's own curl service, so this does the
-   * same on Drupal 10. On Drupal 11 it changes nothing.
-   */
-  protected function getDefaultDriverInstance() {
-    $driver = parent::getDefaultDriverInstance();
-    ServiceFactory::getInstance()->setServiceClass('service.curl', CurlService::class);
-    return $driver;
   }
 
   /**
@@ -138,15 +123,6 @@ class NodePreviewToolbarTest extends WebDriverTestBase {
     // start with the preview route.
     $this->assertTrue($this->getSession()->wait(10000, "window.location.pathname.indexOf('/node/preview/') !== -1 && !!document.querySelector('[data-consumer-node-preview]')"), 'The preview page did not open.');
     $this->jsAssert()->addressMatches('#/node/preview/[^/]+/full$#');
-  }
-
-  /**
-   * Returns the JavaScript assertions, typed the same on Drupal 10 and 11.
-   *
-   * It is what assertSession() returns on both versions.
-   */
-  protected function jsAssert(): WebDriverWebAssert {
-    return new WebDriverWebAssert($this->getSession(), $this->baseUrl);
   }
 
   /**

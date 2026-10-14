@@ -4,8 +4,10 @@ on:
   push:
     tags:
       - '*'
+    # Release lines such as 1.0.x and 2.0.x. The scaffold's 1.x matched no
+    # branch here.
     branches:
-      - 1.x
+      - '*.x'
 
 permissions:
   contents: read

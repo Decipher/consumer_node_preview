@@ -4,11 +4,14 @@ on:
   push:
     tags:
       - '**'
+    # A release line is <major>.x or <major>.<minor>.x, so '*.x' matches
+    # both shapes: * matches dots.
     branches:
-      - 1.0.x
+      - '*.x'
+  # No branch filter on purpose. The filter matches the pull request's base,
+  # so a stacked pull request based on a feature branch would run no jobs at
+  # all, and show no checks rather than failing ones.
   pull_request:
-    branches:
-      - 1.0.x
 
 permissions:
   contents: read
@@ -174,6 +177,9 @@ jobs:
           php-version: ${{ matrix.php-version }}
           extensions: gd, sqlite, pdo_sqlite
           coverage: pcov
+          # Run assert() as Drupal's own tests do. The production php.ini
+          # that setup-php uses removes it.
+          ini-values: zend.assertions=1
 
       # Disable Symfony deprecations helper for PHP 8.4+ until minor
       # versions of Drupal 10 and 11 fully support newer PHP versions.

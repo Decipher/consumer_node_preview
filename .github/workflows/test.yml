@@ -204,6 +204,12 @@ jobs:
         run: .devtools/provision
 
 
+      - name: Run JavaScript tests
+        if: ${{ hashFiles('build/node_modules/.package-lock.json') != '' }}
+        working-directory: build
+        run: npm test
+        continue-on-error: ${{ vars.CI_NODEJS_TEST_IGNORE_FAILURE == '1' }}
+
       - name: Run tests
         working-directory: build
         run: php -d pcov.directory=.. vendor/bin/phpunit

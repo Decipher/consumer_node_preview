@@ -9,12 +9,15 @@ use Drupal\consumers\Entity\Consumer;
 use Drupal\field\Entity\FieldConfig;
 use Drupal\field\Entity\FieldStorageConfig;
 use Drupal\KernelTests\KernelTestBase;
+use Drupal\Core\Routing\RouteObjectInterface;
 use Drupal\node\Controller\NodePreviewController as CoreNodePreviewController;
+use Drupal\node\Form\NodePreviewForm;
 use Drupal\node\Entity\Node;
 use Drupal\node\Entity\NodeType;
 use Drupal\node\NodeInterface;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use Symfony\Component\HttpFoundation\ParameterBag;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
@@ -125,6 +128,98 @@ class NodePreviewControllerTest extends KernelTestBase {
   }
 
   /**
+   * Tests that the View mode select sits with the tabs.
+   *
+   * It is core's own form, minus its link back to the edit form, which stays
+   * in core's bar, and minus the auto-submit, so a change of view mode does
+   * not reload the page.
+   */
+  public function testTheViewModeSelectSitsWithTheTabs(): void {
+    $html = $this->html();
+    $this->assertSame(1, preg_match('#<select[^>]*name="view_mode"[^>]*>#', $html, $select));
+    $this->assertStringContainsString('data-consumer-node-preview-view-mode', $select[0]);
+    $this->assertStringNotContainsString('data-drupal-autosubmit', $select[0]);
+    $this->assertStringNotContainsString('node-preview-backlink', $html);
+  }
+
+  /**
+   * Tests that core's bar keeps only its back link on the preview page.
+   */
+  public function testCoresBarKeepsOnlyItsBackLink(): void {
+    $this->pushRoute('entity.node.preview', ['node_preview' => 'x', 'view_mode_id' => 'full']);
+    $variables = ['page_top' => $this->coresBar()];
+    consumer_node_preview_preprocess_html($variables);
+
+    $html = (string) $this->render($variables['page_top']);
+    $this->assertStringContainsString('node-preview-backlink', $html);
+    $this->assertStringNotContainsString('name="view_mode"', $html);
+    $this->assertStringNotContainsString('value="Switch"', $html);
+  }
+
+  /**
+   * Tests that core's bar is left whole on any other page.
+   */
+  public function testCoresBarIsWholeElsewhere(): void {
+    $this->pushRoute('entity.node.canonical', ['node' => '1']);
+    $variables = ['page_top' => $this->coresBar()];
+    consumer_node_preview_preprocess_html($variables);
+
+    $this->assertStringContainsString('name="view_mode"', (string) $this->render($variables['page_top']));
+  }
+
+  /**
+   * Tests that the target URLs reach JavaScript with the view mode open.
+   *
+   * The page then switches view mode, and target, without a reload.
+   */
+  public function testTargetUrlsReachJavaScript(): void {
+    $this->setSetting('consumer_node_preview', [
+      'targets' => ['local' => ['label' => 'Local', 'url' => 'http://localhost:3000/[view_mode]/[uuid]']],
+    ]);
+    $node = $this->node();
+    $settings = $this->preview($node)['#attached']['drupalSettings']['consumerNodePreview'];
+    $placeholder = NodePreviewController::VIEW_MODE_PLACEHOLDER;
+
+    $this->assertSame('settings:local', $settings['active']);
+    $this->assertSame('full', $settings['viewMode']);
+    $this->assertSame('Local', $settings['targets']['settings:local']['label']);
+    $this->assertSame('http://localhost:3000/' . $placeholder . '/' . $node->uuid(), $settings['targets']['settings:local']['url']);
+    $this->assertStringEndsWith('/node/preview/' . $node->uuid() . '/' . $placeholder, $settings['previewUrl']);
+    $this->assertStringEndsWith('/node/preview/' . $node->uuid() . '/' . $placeholder . '/drupal', $settings['drupalUrl']);
+  }
+
+  /**
+   * Tests that the Drupal tab gets another view mode over AJAX.
+   */
+  public function testTheDrupalTabReloadsOverAjax(): void {
+    $route = $this->container->get('router.route_provider')->getRouteByName('consumer_node_preview.drupal');
+    $this->assertSame('{node_preview}', $route->getRequirement('_node_preview_access'));
+    $this->assertSame('node_preview', $route->getOption('parameters')['node_preview']['type']);
+
+    // A body whose summary only the teaser shows, so the view modes differ.
+    // Drupal 10 core installs the body storage with the node module.
+    if (!FieldStorageConfig::loadByName('node', 'body')) {
+      FieldStorageConfig::create(['field_name' => 'body', 'entity_type' => 'node', 'type' => 'text_with_summary'])->save();
+    }
+    FieldConfig::create(['field_name' => 'body', 'entity_type' => 'node', 'bundle' => 'page', 'settings' => ['display_summary' => TRUE]])->save();
+    $displays = $this->container->get('entity_display.repository');
+    $displays->getViewDisplay('node', 'page')->setComponent('body', ['type' => 'text_default'])->save();
+    $displays->getViewDisplay('node', 'page', 'teaser')->setComponent('body', ['type' => 'text_summary_or_trimmed'])->save();
+    $node = $this->node();
+    $node->set('body', ['value' => 'The whole body.', 'summary' => 'Only the summary.', 'format' => 'plain_text']);
+
+    $response = NodePreviewController::create($this->container)->drupal($node, 'teaser');
+    $command = $response->getCommands()[0];
+    $this->assertSame('[data-consumer-node-preview-drupal]', $command['selector']);
+    $this->assertStringContainsString('Unsaved', (string) $command['data']);
+    $this->assertStringContainsString('Only the summary.', (string) $command['data']);
+    $this->assertStringNotContainsString('The whole body.', (string) $command['data']);
+
+    $full = (string) NodePreviewController::create($this->container)->drupal($node, 'full')->getCommands()[0]['data'];
+    $this->assertStringContainsString('The whole body.', $full);
+  }
+
+  /**
    * Tests that the page has the three tabs.
    */
   public function testThePageHasThreeTabs(): void {
@@ -161,7 +256,8 @@ class NodePreviewControllerTest extends KernelTestBase {
     $html = $this->html($node);
     $this->assertStringContainsString('<iframe src="/node/preview?vm=full#/jsonapi/node/page/' . $node->uuid() . '/preview"', $html);
     $this->assertStringNotContainsString('data-consumer-node-preview-unconfigured', $html);
-    $this->assertStringNotContainsString('data-consumer-node-preview-target', $html);
+    // The picker shows even with one target, so the editor sees which one.
+    $this->assertStringContainsString('data-consumer-node-preview-target', $html);
   }
 
   /**
@@ -195,8 +291,8 @@ class NodePreviewControllerTest extends KernelTestBase {
       'default' => 'settings:two',
     ]);
     $html = $this->html();
-    $this->assertStringContainsString('data-key="settings:two" selected', $html);
-    $this->assertStringNotContainsString('data-key="settings:one" selected', $html);
+    $this->assertStringContainsString('value="settings:two" selected="selected"', $html);
+    $this->assertStringNotContainsString('value="settings:one" selected', $html);
   }
 
   /**
@@ -265,6 +361,41 @@ class NodePreviewControllerTest extends KernelTestBase {
     // The field holds pages, which hold the field again. So the paths go
     // three levels deep, and stop there.
     $this->assertSame('field_content,field_content.field_content,field_content.field_content.field_content', $query['include']);
+  }
+
+  /**
+   * Builds core's preview bar the way core attaches it.
+   *
+   * @return array<string, mixed>
+   *   The page_top render array.
+   */
+  protected function coresBar(): array {
+    $node = $this->node();
+    // Core's controller sets the view mode the form reads.
+    CoreNodePreviewController::create($this->container)->view($node, 'full');
+    return [
+      'node_preview' => [
+        '#type' => 'container',
+        'view_mode' => $this->container->get('form_builder')->getForm(NodePreviewForm::class, $node),
+      ],
+    ];
+  }
+
+  /**
+   * Makes a route the current one.
+   *
+   * @param string $route_name
+   *   The route name.
+   * @param array<string, string> $parameters
+   *   The route's raw parameters.
+   */
+  protected function pushRoute(string $route_name, array $parameters): void {
+    $request = Request::create('/');
+    $request->attributes->set(RouteObjectInterface::ROUTE_NAME, $route_name);
+    $request->attributes->set('_raw_variables', new ParameterBag($parameters));
+    $request->attributes->set(RouteObjectInterface::ROUTE_OBJECT, $this->container->get('router.route_provider')->getRouteByName($route_name));
+    $request->setSession(new Session(new MockArraySessionStorage()));
+    $this->container->get('request_stack')->push($request);
   }
 
   /**

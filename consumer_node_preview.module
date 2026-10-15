@@ -40,10 +40,32 @@ function consumer_node_preview_theme(array $existing, string $type, string $them
     'consumer_node_preview' => [
       'variables' => [
         'drupal' => [],
+        'view_mode' => [],
+        'frontend' => [],
         'targets' => [],
         'active_target' => NULL,
         'jsonapi_url' => NULL,
+        'no_targets' => [],
+        'no_document' => [],
       ],
     ],
   ];
+}
+
+/**
+ * Implements hook_preprocess_HOOK() for html.
+ *
+ * On the preview page, the View mode select sits with the preview's tabs. So
+ * core's preview bar keeps only its link back to the edit form.
+ */
+function consumer_node_preview_preprocess_html(array &$variables): void {
+  if (\Drupal::routeMatch()->getRouteName() !== 'entity.node.preview' || !isset($variables['page_top']['node_preview']['view_mode'])) {
+    return;
+  }
+  $form = &$variables['page_top']['node_preview']['view_mode'];
+  foreach (['view_mode', 'submit'] as $key) {
+    if (isset($form[$key])) {
+      $form[$key]['#access'] = FALSE;
+    }
+  }
 }

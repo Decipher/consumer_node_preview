@@ -32,15 +32,22 @@ for further information.
 ## Features
 
 - **A tabbed preview screen.** Core's Preview button opens three tabs:
-  - **Frontend** frames the unsaved node in a frontend, with Phone, Tablet
-    and Full widths, a picker when there is more than one target, and an
-    "Open in new tab" link. It fills the space below the admin toolbar.
+  - **Frontend** frames the unsaved node in a frontend, with a Frontend
+    picker, Phone, Tablet and Full widths, and an "Open in new tab" link.
+    It fills the space below the admin toolbar.
   - **Drupal** shows core's own preview.
   - **JSON:API** shows the preview document the frontend reads.
 
+  Core's View mode select sits at the end of the tab row. Changing it does
+  not reload the page: the frame loads the new view mode, and the Drupal tab
+  fetches it over AJAX. Core's preview bar keeps its link back to the edit
+  form.
+
   The screen remembers the editor's last tab, width and frontend. The preview
   route becomes a node operation, so it uses the admin theme when "Use the
-  administration theme when editing or creating content" is on.
+  administration theme when editing or creating content" is on. The screen
+  uses core's form elements, buttons and tab markup, so the admin theme
+  styles it.
 - **Targets per consumer.** Every consumer gets a **Preview targets** field:
   a list of label and URL pairs, for example local, staging and production.
   A frontend can also register its own targets over the API (see below).
@@ -85,6 +92,9 @@ A target URL is a template. It can use these tokens:
 
 When JSON:API has no preview for the node's bundle, the two endpoint tokens
 stay in the URL as they are, so the frontend shows what is missing.
+
+Put `[view_mode]` in the path or the query, not in the fragment. A change to
+the fragment alone does not reload the frame.
 
 The preview document includes the node's entity reference revisions fields,
 such as paragraphs, and the paragraphs inside those, up to three levels deep.

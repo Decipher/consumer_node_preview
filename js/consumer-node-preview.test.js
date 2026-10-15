@@ -8,10 +8,45 @@
 
 /* eslint-env jest */
 
+const VIEW_MODE = '__consumer_node_preview_view_mode__';
+
 const TARGETS = [
-  { key: 'settings:one', label: 'One', url: '/one' },
-  { key: 'settings:two', label: 'Two', url: '/two' },
+  { key: 'settings:one', label: 'One', url: `/one?mode=${VIEW_MODE}` },
+  { key: 'settings:two', label: 'Two', url: `/two?mode=${VIEW_MODE}` },
 ];
+
+/**
+ * Returns the page's settings, as the controller attaches them.
+ *
+ * @param {Array} targets
+ *   The frontend targets, with key, label and url.
+ *
+ * @return {object}
+ *   The consumerNodePreview settings.
+ */
+const settings = (targets) => ({
+  placeholder: VIEW_MODE,
+  viewMode: 'full',
+  active: targets.length ? targets[0].key : null,
+  targets: Object.fromEntries(
+    targets.map((each) => [each.key, { label: each.label, url: each.url }]),
+  ),
+  previewUrl: `/node/preview/uuid/${VIEW_MODE}`,
+  drupalUrl: `/node/preview/uuid/${VIEW_MODE}/drupal`,
+});
+
+/**
+ * Completes a target's URL for a view mode.
+ *
+ * @param {string} name
+ *   The target's name, one or two.
+ * @param {string} [viewMode]
+ *   The view mode.
+ *
+ * @return {string}
+ *   The URL.
+ */
+const url = (name, viewMode = 'full') => `/${name}?mode=${viewMode}`;
 
 /**
  * Returns the preview markup.
@@ -44,7 +79,7 @@ const markup = ({
       ? `<select data-consumer-node-preview-target>${targets
           .map(
             (each, index) =>
-              `<option value="${each.url}" data-key="${each.key}"${index === 0 ? ' selected' : ''}>${each.label}</option>`,
+              `<option value="${each.key}"${index === 0 ? ' selected' : ''}>${each.label}</option>`,
           )
           .join('')}</select>`
       : '';
@@ -54,11 +89,12 @@ const markup = ({
         `<button type="button" aria-pressed="${width === '100%'}" data-consumer-node-preview-width="${width}">${width}</button>`,
     )
     .join('');
+  const first = targets.length && targets[0].url.replace(VIEW_MODE, 'full');
   const frontend = targets.length
     ? `${picker}${widths}
-      <a href="${targets[0].url}" target="_blank" data-consumer-node-preview-open>Open</a>
+      <a href="${first}" target="_blank" data-consumer-node-preview-open>Open</a>
       <div data-consumer-node-preview-viewport>
-        <iframe src="${targets[0].url}" data-consumer-node-preview-frame></iframe>
+        <iframe src="${first}" data-consumer-node-preview-frame></iframe>
       </div>`
     : '<div data-consumer-node-preview-unconfigured></div>';
   const document = jsonapi
@@ -69,8 +105,14 @@ const markup = ({
       <ul role="tablist">
         ${tab('frontend', 'Frontend')}${tab('drupal', 'Drupal')}${tab('jsonapi', 'JSON:API')}
       </ul>
+      <select data-consumer-node-preview-view-mode>
+        <option value="full" selected>Default</option>
+        <option value="teaser">Teaser</option>
+      </select>
       <section id="consumer-node-preview-frontend" role="tabpanel"${active !== 'frontend' ? ' hidden' : ''}>${frontend}</section>
-      <section id="consumer-node-preview-drupal" role="tabpanel"${active !== 'drupal' ? ' hidden' : ''}><p>Core preview</p></section>
+      <section id="consumer-node-preview-drupal" role="tabpanel"${active !== 'drupal' ? ' hidden' : ''}>
+        <div data-consumer-node-preview-drupal><p>Core preview</p></div>
+      </section>
       <section id="consumer-node-preview-jsonapi" role="tabpanel" hidden>${document}</section>
     </div>`;
 };
@@ -79,12 +121,17 @@ const markup = ({
  * Builds the page and attaches the behavior to it.
  *
  * @param {object} [options]
- *   The markup options.
+ *   The markup options, and settings to override.
  *
  * @return {HTMLElement}
  *   The preview's wrapper.
  */
-const attach = (options) => {
+const attach = (options = {}) => {
+  // The script holds the object it loaded with, so this fills that object.
+  drupalSettings.consumerNodePreview = {
+    ...settings(options.targets || TARGETS),
+    ...options.settings,
+  };
   document.body.innerHTML = markup(options);
   Drupal.behaviors.consumerNodePreview.attach(document);
   return document.querySelector('[data-consumer-node-preview]');
@@ -110,15 +157,23 @@ const settle = () =>
   });
 
 /**
- * Picks a frontend in the picker, as an editor does.
+ * Picks an option in a select, as an editor does.
  *
+ * @param {HTMLSelectElement} select
+ *   The select.
  * @param {string} value
  *   The option's value.
  */
-const pick = (value) => {
-  picker().value = value;
-  picker().dispatchEvent(new Event('change'));
+const choose = (select, value) => {
+  select.value = value;
+  select.dispatchEvent(new Event('change'));
 };
+const pick = (value) => choose(picker(), value);
+const viewMode = (value) =>
+  choose(
+    document.querySelector('[data-consumer-node-preview-view-mode]'),
+    value,
+  );
 
 describe('Drupal.behaviors.consumerNodePreview', () => {
   beforeEach(() => {
@@ -139,7 +194,16 @@ describe('Drupal.behaviors.consumerNodePreview', () => {
         element.dataset.once = id;
         return true;
       });
+    global.drupalSettings = {};
     global.fetch = jest.fn();
+    // Core's Drupal.ajax(). Each request waits until the test settles it.
+    Drupal.ajax = jest.fn(() => ({
+      execute: () =>
+        new Promise((resolve, reject) => {
+          Drupal.ajax.pending.push({ resolve, reject });
+        }),
+    }));
+    Drupal.ajax.pending = [];
     window.localStorage.clear();
     window.history.replaceState(null, '', '/');
     jest.isolateModules(() => {
@@ -151,6 +215,7 @@ describe('Drupal.behaviors.consumerNodePreview', () => {
 
   afterEach(() => {
     delete global.Drupal;
+    delete global.drupalSettings;
     delete global.once;
     delete global.fetch;
     jest.restoreAllMocks();
@@ -302,9 +367,9 @@ describe('Drupal.behaviors.consumerNodePreview', () => {
   describe('frontend picker', () => {
     it('frames the picked frontend and remembers it', () => {
       attach();
-      pick('/two');
-      expect(frame().getAttribute('src')).toBe('/two');
-      expect(open().getAttribute('href')).toBe('/two');
+      pick('settings:two');
+      expect(frame().getAttribute('src')).toBe(url('two'));
+      expect(open().getAttribute('href')).toBe(url('two'));
       expect(window.localStorage.getItem('consumer_node_preview.target')).toBe(
         'settings:two',
       );
@@ -312,10 +377,10 @@ describe('Drupal.behaviors.consumerNodePreview', () => {
 
     it('does not reload a frame that already shows the frontend', () => {
       attach();
-      const setAttribute = jest.spyOn(frame(), 'setAttribute');
-      pick('/one');
-      expect(setAttribute).not.toHaveBeenCalled();
-      expect(open().getAttribute('href')).toBe('/one');
+      const before = frame();
+      pick('settings:one');
+      expect(frame()).toBe(before);
+      expect(open().getAttribute('href')).toBe(url('one'));
     });
 
     it('opens on the remembered frontend', () => {
@@ -324,8 +389,8 @@ describe('Drupal.behaviors.consumerNodePreview', () => {
         'settings:two',
       );
       attach();
-      expect(picker().value).toBe('/two');
-      expect(frame().getAttribute('src')).toBe('/two');
+      expect(picker().value).toBe('settings:two');
+      expect(frame().getAttribute('src')).toBe(url('two'));
     });
 
     it('lets a frontend in the URL win over the remembered one', () => {
@@ -335,19 +400,132 @@ describe('Drupal.behaviors.consumerNodePreview', () => {
       );
       window.history.replaceState(null, '', '/?frontend=settings:one');
       attach();
-      expect(frame().getAttribute('src')).toBe('/one');
+      expect(frame().getAttribute('src')).toBe(url('one'));
     });
 
     it('works with one frontend and no picker', () => {
       attach({ targets: [TARGETS[0]] });
       expect(picker()).toBe(null);
-      expect(frame().getAttribute('src')).toBe('/one');
+      expect(frame().getAttribute('src')).toBe(url('one'));
     });
 
     it('works with no frontend at all', () => {
       attach({ targets: [], active: 'drupal' });
       expect(frame()).toBe(null);
       expect(panel('drupal').hidden).toBe(false);
+    });
+  });
+
+  describe('view mode', () => {
+    it('switches the frame and the new tab link without a reload', () => {
+      attach();
+      const before = frame();
+      viewMode('teaser');
+      // A new frame, so the switch adds no history entry.
+      expect(frame()).not.toBe(before);
+      expect(frame().getAttribute('src')).toBe(url('one', 'teaser'));
+      expect(open().getAttribute('href')).toBe(url('one', 'teaser'));
+      expect(window.location.pathname).toBe('/node/preview/uuid/teaser');
+    });
+
+    it('keeps the picked frontend', () => {
+      attach();
+      pick('settings:two');
+      viewMode('teaser');
+      expect(frame().getAttribute('src')).toBe(url('two', 'teaser'));
+    });
+
+    it('keeps the query string in the address', () => {
+      window.history.replaceState(null, '', '/?frontend=settings:two');
+      attach();
+      viewMode('teaser');
+      expect(window.location.pathname + window.location.search).toBe(
+        '/node/preview/uuid/teaser?frontend=settings:two',
+      );
+    });
+
+    it('starts from the view mode the page shows', () => {
+      attach({ settings: { viewMode: 'teaser' } });
+      pick('settings:two');
+      expect(frame().getAttribute('src')).toBe(url('two', 'teaser'));
+    });
+
+    it('leaves the address alone without a preview URL', () => {
+      attach({ settings: { previewUrl: null } });
+      viewMode('teaser');
+      expect(window.location.pathname).toBe('/');
+      expect(frame().getAttribute('src')).toBe(url('one', 'teaser'));
+    });
+
+    it('switches with no frontend at all', () => {
+      attach({ targets: [], active: 'drupal' });
+      viewMode('teaser');
+      expect(frame()).toBe(null);
+      expect(Drupal.ajax).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Drupal tab', () => {
+    const request = (mode) => ({
+      url: `/node/preview/uuid/${mode}/drupal`,
+      progress: { type: 'fullscreen' },
+    });
+
+    it('asks for nothing until the view mode changes', () => {
+      attach({ active: 'drupal' });
+      tab('frontend').click();
+      tab('drupal').click();
+      expect(Drupal.ajax).not.toHaveBeenCalled();
+    });
+
+    it('follows the view mode while it is shown', () => {
+      attach({ active: 'drupal' });
+      viewMode('teaser');
+      expect(Drupal.ajax).toHaveBeenCalledWith(request('teaser'));
+    });
+
+    it('waits until it is shown, and then asks once', async () => {
+      attach();
+      viewMode('teaser');
+      expect(Drupal.ajax).not.toHaveBeenCalled();
+      tab('drupal').click();
+      expect(Drupal.ajax).toHaveBeenCalledWith(request('teaser'));
+      Drupal.ajax.pending[0].resolve();
+      await settle();
+      tab('frontend').click();
+      tab('drupal').click();
+      expect(Drupal.ajax).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs one request at a time and catches up with the view mode', async () => {
+      attach({ active: 'drupal' });
+      viewMode('teaser');
+      viewMode('full');
+      expect(Drupal.ajax).toHaveBeenCalledTimes(1);
+      Drupal.ajax.pending[0].resolve();
+      await settle();
+      expect(Drupal.ajax).toHaveBeenCalledTimes(2);
+      expect(Drupal.ajax).toHaveBeenLastCalledWith(request('full'));
+      Drupal.ajax.pending[1].resolve();
+      await settle();
+      expect(Drupal.ajax).toHaveBeenCalledTimes(2);
+    });
+
+    it('asks again when it is shown after a failed request', async () => {
+      attach({ active: 'drupal' });
+      viewMode('teaser');
+      Drupal.ajax.pending[0].reject();
+      await settle();
+      expect(Drupal.ajax).toHaveBeenCalledTimes(1);
+      tab('frontend').click();
+      tab('drupal').click();
+      expect(Drupal.ajax).toHaveBeenCalledTimes(2);
+    });
+
+    it('asks for nothing without a Drupal URL', () => {
+      attach({ active: 'drupal', settings: { drupalUrl: null } });
+      viewMode('teaser');
+      expect(Drupal.ajax).not.toHaveBeenCalled();
     });
   });
 
@@ -395,9 +573,9 @@ describe('Drupal.behaviors.consumerNodePreview', () => {
     });
     attach();
     tab('drupal').click();
-    pick('/two');
+    pick('settings:two');
     width('390px').click();
     expect(panel('drupal').hidden).toBe(false);
-    expect(frame().getAttribute('src')).toBe('/two');
+    expect(frame().getAttribute('src')).toBe(url('two'));
   });
 });

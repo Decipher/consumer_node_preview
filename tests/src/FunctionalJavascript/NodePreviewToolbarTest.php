@@ -62,6 +62,42 @@ class NodePreviewToolbarTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests the view mode switch, which reloads the frame but not the page.
+   */
+  public function testViewModeSwitchesWithoutPageReload(): void {
+    $this->preview();
+    $assert = $this->jsAssert();
+
+    // Core's bar keeps only its link back to the edit form.
+    $assert->elementExists('css', '.node-preview-container .node-preview-backlink');
+    $assert->elementNotExists('css', '.node-preview-container select');
+    $this->assertStringContainsString('/frontend-one?vm=full', $this->frameSource());
+
+    // The Drupal tab holds the full body, past the teaser's trim length.
+    $this->assertStringContainsString(self::BODY_END, $assert->elementExists('css', '[data-consumer-node-preview-drupal]')->getHtml());
+
+    $this->getSession()->executeScript('window.consumerNodePreviewTest = true;');
+    $this->getSession()->executeScript("document.querySelector('[data-consumer-node-preview-drupal] > *').setAttribute('data-test-stale', '1');");
+    $history = $this->getSession()->evaluateScript('window.history.length');
+    $this->getSession()->getPage()->find('css', '[data-consumer-node-preview-view-mode]')->selectOption('teaser');
+
+    $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="vm=teaser"]'));
+    $this->assertStringEndsWith('/teaser', (string) parse_url($this->getSession()->getCurrentUrl(), PHP_URL_PATH));
+    $this->assertStringContainsString('vm=teaser', (string) $assert->elementExists('css', '[data-consumer-node-preview-open]')->getAttribute('href'));
+
+    // The Drupal tab fetches the new view mode when it is shown.
+    $this->getSession()->getPage()->clickLink('Drupal');
+    $this->assertTrue($assert->waitForElementRemoved('css', '[data-consumer-node-preview-drupal] [data-test-stale]'));
+    // The teaser trims the body, so the end is gone.
+    $this->assertStringNotContainsString(self::BODY_END, $assert->elementExists('css', '[data-consumer-node-preview-drupal]')->getHtml());
+    // The frame reloaded without a history entry, so Back leaves the preview.
+    $this->assertSame($history, $this->getSession()->evaluateScript('window.history.length'));
+
+    // Checked last, once every step has had time to cause a reload.
+    $this->assertTrue($this->getSession()->evaluateScript('window.consumerNodePreviewTest === true'), 'The view mode change reloaded the page.');
+  }
+
+  /**
    * Tests the frontend picker, the widths and remembered choices.
    */
   public function testFrontendWidthsAndJsonApi(): void {
@@ -69,6 +105,8 @@ class NodePreviewToolbarTest extends WebDriverTestBase {
     $assert = $this->jsAssert();
     $page = $this->getSession()->getPage();
 
+    // The browser ties the Frontend label to the picker. Its id is used once.
+    $this->assertSame(1, $this->getSession()->evaluateScript("document.querySelector('[data-consumer-node-preview-target]').labels.length"));
     $page->find('css', '[data-consumer-node-preview-target]')->selectOption('Two');
     $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="/frontend-two?vm=full"]'));
     $this->assertStringContainsString('/frontend-two?vm=full', (string) $assert->elementExists('css', '[data-consumer-node-preview-open]')->getAttribute('href'));

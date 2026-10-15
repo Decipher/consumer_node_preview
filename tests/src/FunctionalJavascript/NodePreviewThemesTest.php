@@ -87,7 +87,10 @@ class NodePreviewThemesTest extends WebDriverTestBase {
     $this->container->get('theme_installer')->install([$theme]);
     $this->config('system.theme')->set($admin ? 'admin' : 'default', $theme)->save();
     $this->config('node.settings')->set('use_admin_theme', $admin)->save();
-    $this->container->get('router.builder')->rebuild();
+    // The Drupal tab renders Olivero's teaser component after a view mode
+    // change. Drupal 10 finds a newly installed theme's components only after
+    // a full cache clear.
+    drupal_flush_all_caches();
 
     $this->getSession()->resizeWindow(1440, 900);
     $this->drupalGet('node/add/page');
@@ -117,6 +120,8 @@ class NodePreviewThemesTest extends WebDriverTestBase {
     // menus have links with the same text.
     $page->find('css', '[data-consumer-node-preview-target]')->selectOption('Two');
     $this->assertNotNull($this->jsAssert()->waitForElement('css', '[data-consumer-node-preview-frame][src*="/frontend-two"]'));
+    $page->find('css', '[data-consumer-node-preview-view-mode]')->selectOption('teaser');
+    $this->assertNotNull($this->jsAssert()->waitForElement('css', '[data-consumer-node-preview-frame][src*="vm=teaser"]'));
     $page->pressButton('Phone');
     $this->assertSame(390, $this->getSession()->evaluateScript("Math.round(document.querySelector('[data-consumer-node-preview-frame]').getBoundingClientRect().width)"));
     $page->find('css', '[data-consumer-node-preview-tab="drupal"]')->click();
@@ -139,6 +144,7 @@ class NodePreviewThemesTest extends WebDriverTestBase {
         '[data-consumer-node-preview-tab="frontend"]',
         '[data-consumer-node-preview-tab="drupal"]',
         '[data-consumer-node-preview-tab="jsonapi"]',
+        '[data-consumer-node-preview-view-mode]',
         '[data-consumer-node-preview-target]',
         '[data-consumer-node-preview-width="390px"]',
         '[data-consumer-node-preview-open]',

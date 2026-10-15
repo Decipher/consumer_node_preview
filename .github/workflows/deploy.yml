@@ -15,7 +15,7 @@ jobs:
     # Only a push deploys. A pull request's test run, from a fork too, never
     # reaches the deploy steps.
     if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
 
     permissions:
       contents: read

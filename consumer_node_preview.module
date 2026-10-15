@@ -7,6 +7,7 @@
 
 declare(strict_types=1);
 
+use Drupal\consumer_node_preview\PreviewTargetsProviderInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Field\BaseFieldDefinition;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
@@ -20,12 +21,29 @@ function consumer_node_preview_entity_base_field_info(EntityTypeInterface $entit
   if ($entity_type->id() === 'consumer') {
     $fields['preview_targets'] = BaseFieldDefinition::create('consumer_preview_target')
       ->setLabel(new TranslatableMarkup('Preview targets'))
-      ->setDescription(new TranslatableMarkup('Frontend URLs that render node previews for this consumer. The URL can use the tokens [jsonapi_node_preview], [jsonapi_node_preview_path], [uuid] and [view_mode].'))
+      ->setDescription(new TranslatableMarkup('Frontend URLs that render node previews for this consumer. The URL can use the tokens [jsonapi_node_preview], [jsonapi_node_preview_path], [uuid], [view_mode] and [layout].'))
       ->setCardinality(FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED)
       ->setTranslatable(FALSE)
       ->setDisplayOptions('form', [
         'type' => 'consumer_preview_target_default',
         'weight' => 10,
+      ])
+      ->setDisplayConfigurable('form', TRUE);
+    $fields['preview_layouts'] = BaseFieldDefinition::create('string')
+      ->setLabel(new TranslatableMarkup('Preview layouts'))
+      ->setDescription(new TranslatableMarkup('Layouts the frontend can render a preview in, such as "default". The preview shows them in a Layout select and puts the chosen one in the [layout] token.'))
+      ->setCardinality(FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED)
+      ->setTranslatable(FALSE)
+      ->setSetting('max_length', 64)
+      ->addPropertyConstraints('value', [
+        'Regex' => [
+          'pattern' => PreviewTargetsProviderInterface::LAYOUT_PATTERN,
+          'message' => 'A layout name may only use letters, numbers, hyphens and underscores.',
+        ],
+      ])
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield',
+        'weight' => 11,
       ])
       ->setDisplayConfigurable('form', TRUE);
   }
@@ -42,6 +60,7 @@ function consumer_node_preview_theme(array $existing, string $type, string $them
         'drupal' => [],
         'view_mode' => [],
         'frontend' => [],
+        'layout' => [],
         'targets' => [],
         'active_target' => NULL,
         'jsonapi_url' => NULL,

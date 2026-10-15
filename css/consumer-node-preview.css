@@ -8,6 +8,9 @@
 .consumer-node-preview {
   /* The viewport left by the displaced admin bars and the preview bar. */
   --consumer-node-preview-height: calc(100dvh - var(--drupal-displace-offset-top, 0px) - var(--drupal-displace-offset-bottom, 0px) - 8rem);
+
+  /* The narrow-screen rules below read the preview's own width. */
+  container-type: inline-size;
 }
 
 /* The tab row: the tabs, then core's View mode select at its end. */
@@ -50,6 +53,18 @@
   margin-block-end: var(--admin-space-s, var(--space-s, 0.75rem));
 }
 
+.consumer-node-preview__pickers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--admin-space-s, var(--space-s, 0.75rem)) var(--admin-space-l, var(--space-l, 1.5rem));
+}
+
+/* The layout picker stays hidden while the framed target has no layouts. */
+.consumer-node-preview__pickers [hidden] {
+  display: none;
+}
+
 .consumer-node-preview__actions {
   display: flex;
   flex-wrap: wrap;
@@ -81,6 +96,57 @@
   border: 1px solid var(--admin-color-border, #d3d4d9);
   border-radius: var(--admin-radius-m, 4px);
   background-color: #fff;
+}
+
+/*
+ * Narrow screens. Themes stack the tabs there, so the controls below them
+ * share rows, and the width presets wider than the preview are left out.
+ * The breakpoints match the 390px and 820px presets in the template.
+ */
+@media (max-width: 47.99em) {
+  .consumer-node-preview__bar {
+    margin-block-end: var(--admin-space-s, var(--space-s, 0.75rem));
+  }
+
+  .consumer-node-preview__tabs .tabs {
+    margin-block-end: 0;
+  }
+}
+
+@container (max-width: 821px) {
+  .consumer-node-preview__widths [data-consumer-node-preview-width="820px"] {
+    display: none;
+  }
+}
+
+@container (max-width: 40em) {
+  .consumer-node-preview__pickers {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    min-width: 0;
+    gap: var(--admin-space-s, var(--space-s, 0.75rem));
+  }
+
+  .consumer-node-preview__pickers > * {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .consumer-node-preview__pickers > :first-child {
+    flex-grow: 1;
+  }
+
+  .consumer-node-preview__pickers select {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+@container (max-width: 391px) {
+  .consumer-node-preview__widths {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {

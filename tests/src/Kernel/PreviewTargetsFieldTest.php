@@ -211,7 +211,9 @@ class PreviewTargetsFieldTest extends KernelTestBase {
     $this->assertSame('Local', $element[0]['label']['#default_value']);
     $this->assertSame('http://localhost:3000/p', $element[0]['url']['#default_value']);
     $this->assertSame(2048, $element[0]['url']['#maxlength']);
-    $this->assertStringContainsString('[jsonapi_node_preview]', (string) $element[0]['url']['#description']);
+    foreach (['[jsonapi_node_preview]', '[jsonapi_node_preview_path]', '[uuid]', '[view_mode]', '[layout]'] as $token) {
+      $this->assertStringContainsString($token, (string) $element[0]['url']['#description']);
+    }
     // The field has unlimited values, so an empty row follows the target.
     $this->assertSame('', $element[1]['label']['#default_value']);
     $this->assertSame('', $element[1]['url']['#default_value']);
@@ -268,6 +270,88 @@ class PreviewTargetsFieldTest extends KernelTestBase {
     );
 
     $this->assertSame('http://localhost:3000/p#[jsonapi_node_preview]|[jsonapi_node_preview_path]', $url);
+  }
+
+  /**
+   * Tests that a consumer's layouts reach each of its targets.
+   */
+  public function testConsumerLayoutsReachItsTargets(): void {
+    $consumer = Consumer::create([
+      'client_id' => 'app',
+      'label' => 'App',
+      'preview_targets' => [
+        ['label' => 'Local', 'url' => 'http://localhost:3000/p?layout=[layout]'],
+        ['label' => 'Live', 'url' => 'https://example.com/p?layout=[layout]'],
+      ],
+      'preview_layouts' => ['default', 'preview'],
+    ]);
+    $consumer->save();
+
+    $reloaded = Consumer::load($consumer->id());
+    $this->assertSame(['default', 'preview'], $this->provider->getLayouts($reloaded));
+    $this->assertSame(['default', 'preview'], $this->provider->getAllTargets()[$consumer->id() . ':1']['layouts']);
+    $this->assertSame(['default', 'preview'], $this->provider->getTargetByKey($consumer->id() . ':0')['layouts']);
+  }
+
+  /**
+   * Tests that a site target lists its own layouts, and only valid names.
+   */
+  public function testSiteTargetLayouts(): void {
+    $this->setSetting('consumer_node_preview', [
+      'targets' => [
+        'site' => ['label' => 'Site', 'url' => '/p', 'layouts' => ['default', 'not a name', 'preview']],
+        'plain' => ['label' => 'Plain', 'url' => '/q'],
+      ],
+    ]);
+
+    $targets = $this->provider->getAllTargets();
+    $this->assertSame(['default', 'preview'], $targets['settings:site']['layouts']);
+    $this->assertSame([], $targets['settings:plain']['layouts']);
+  }
+
+  /**
+   * Tests the layout name rule on the field.
+   */
+  public function testLayoutNamesAreValidated(): void {
+    $consumer = Consumer::create([
+      'client_id' => 'app',
+      'label' => 'App',
+      'preview_layouts' => ['preview-2', 'not a name', "preview\n"],
+    ]);
+    $violations = $consumer->validate()->getByField('preview_layouts');
+    $this->assertCount(2, $violations);
+    $this->assertSame('preview_layouts.1.value', $violations[0]->getPropertyPath());
+    $this->assertSame('preview_layouts.2.value', $violations[1]->getPropertyPath());
+  }
+
+  /**
+   * Tests that a layout listed twice shows once.
+   */
+  public function testDuplicateLayoutsShowOnce(): void {
+    $consumer = Consumer::create([
+      'client_id' => 'app',
+      'label' => 'App',
+      'preview_layouts' => ['default', 'preview', 'default'],
+    ]);
+    $consumer->save();
+    $this->assertSame(['default', 'preview'], $this->provider->getLayouts($consumer));
+
+    $this->setSetting('consumer_node_preview', [
+      'targets' => ['site' => ['label' => 'Site', 'url' => '/p', 'layouts' => ['default', 'default']]],
+    ]);
+    $this->assertSame(['default'], $this->provider->getAllTargets()['settings:site']['layouts']);
+  }
+
+  /**
+   * Tests that the layout token takes the chosen layout, or nothing.
+   */
+  public function testResolveUrlFillsTheLayout(): void {
+    $node = Node::create(['type' => 'article', 'title' => 'Test']);
+    $node->save();
+
+    $url = 'http://localhost:3000/p?vm=[view_mode]&layout=[layout]';
+    $this->assertSame('http://localhost:3000/p?vm=full&layout=preview', $this->provider->resolveUrl($url, $node, 'full', 'preview'));
+    $this->assertSame('http://localhost:3000/p?vm=full&layout=', $this->provider->resolveUrl($url, $node, 'full'));
   }
 
   /**

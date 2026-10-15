@@ -7,8 +7,10 @@
  * - drupal: Drupal's render of the unsaved node.
  * - view_mode: Core's View mode form, shown at the end of the tab row.
  * - frontend: The frontend picker, a select element.
- * - targets: Preview targets keyed by target key, each with a label and a
- *   resolved url.
+ * - layout: The layout picker, a select element, or empty when no target has
+ *   layouts.
+ * - targets: Preview targets keyed by target key, each with a label, a
+ *   resolved url and its layouts.
  * - active_target: The key of the target the frontend tab opens on, or NULL.
  * - jsonapi_url: The JSON:API preview document's URL, or NULL.
  * - no_targets: A warning for when there are no targets.
@@ -43,7 +45,10 @@
   <section id="consumer-node-preview-frontend" class="consumer-node-preview__panel" role="tabpanel" aria-labelledby="consumer-node-preview-frontend-tab"{{ active != 'frontend' ? ' hidden' }}>
     {% if targets %}
       <div class="consumer-node-preview__controls">
-        {{ frontend }}
+        <div class="consumer-node-preview__pickers">
+          {{ frontend }}
+          {{ layout }}
+        </div>
         <div class="consumer-node-preview__actions">
           <div class="consumer-node-preview__widths" role="group" aria-label="{{ 'Preview width'|t }}">
             {% for width, label in {'390px': 'Phone'|t, '820px': 'Tablet'|t, '100%': 'Full'|t} %}

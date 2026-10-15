@@ -51,7 +51,11 @@ class NodePreviewThemesTest extends WebDriverTestBase {
         'consumer_node_preview' => (object) [
           'value' => [
             'targets' => [
-              'one' => ['label' => 'One', 'url' => 'http://localhost:9/frontend-one?vm=[view_mode]'],
+              'one' => [
+                'label' => 'One',
+                'url' => 'http://localhost:9/frontend-one?vm=[view_mode]&layout=[layout]',
+                'layouts' => ['default', 'bare_page'],
+              ],
               'two' => ['label' => 'Two', 'url' => 'http://localhost:9/frontend-two?vm=[view_mode]'],
             ],
             'default' => 'settings:one',
@@ -118,8 +122,12 @@ class NodePreviewThemesTest extends WebDriverTestBase {
 
     // The controls work. The tabs are found by their own attribute, as admin
     // menus have links with the same text.
+    $page->find('css', '[data-consumer-node-preview-layout]')->selectOption('bare_page');
+    $this->assertNotNull($this->jsAssert()->waitForElement('css', '[data-consumer-node-preview-frame][src*="layout=bare_page"]'));
     $page->find('css', '[data-consumer-node-preview-target]')->selectOption('Two');
     $this->assertNotNull($this->jsAssert()->waitForElement('css', '[data-consumer-node-preview-frame][src*="/frontend-two"]'));
+    // Two lists no layouts, so its picker hides.
+    $this->assertFalse($page->find('css', '[data-consumer-node-preview-layout]')->isVisible());
     $page->find('css', '[data-consumer-node-preview-view-mode]')->selectOption('teaser');
     $this->assertNotNull($this->jsAssert()->waitForElement('css', '[data-consumer-node-preview-frame][src*="vm=teaser"]'));
     $page->pressButton('Phone');
@@ -146,6 +154,7 @@ class NodePreviewThemesTest extends WebDriverTestBase {
         '[data-consumer-node-preview-tab="jsonapi"]',
         '[data-consumer-node-preview-view-mode]',
         '[data-consumer-node-preview-target]',
+        '[data-consumer-node-preview-layout]',
         '[data-consumer-node-preview-width="390px"]',
         '[data-consumer-node-preview-open]',
         '[data-consumer-node-preview-frame]',

@@ -46,7 +46,7 @@ class PreviewTargetWidget extends WidgetBase {
     $element['url'] = [
       '#type' => 'textfield',
       '#title' => $this->t('URL template'),
-      '#description' => $this->t('An absolute http or https URL. It can use the tokens [jsonapi_node_preview], [jsonapi_node_preview_path], [uuid] and [view_mode].'),
+      '#description' => $this->t('An absolute http or https URL. It can use the tokens [jsonapi_node_preview], [jsonapi_node_preview_path], [uuid], [view_mode] and [layout].'),
       '#default_value' => $items[$delta]->url ?? '',
       '#maxlength' => 2048,
     ];

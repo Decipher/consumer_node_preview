@@ -1,6 +1,7 @@
-// DrupalCI lints CSS with core's property order (see .gitlab-ci.yml). Use the
-// same order locally when core is in the build, so one file passes both.
-// The config runs from the build root and from the module's copy inside it.
+// DrupalCI lints CSS with core's config (see .gitlab-ci.yml). Use its order
+// and media query notation locally when core is in the build, so one file
+// passes both. The config runs from the build root and from the module's
+// copy inside it.
 let order = { 'order/properties-alphabetical-order': true };
 const coreConfig = [
   `${__dirname}/web/core/.stylelintrc.json`,
@@ -9,7 +10,11 @@ const coreConfig = [
 if (coreConfig) {
   // eslint-disable-next-line global-require, import/no-dynamic-require
   const core = require(coreConfig);
-  order = { 'order/properties-order': core.rules['order/properties-order'] };
+  order = Object.fromEntries(
+    ['order/order', 'order/properties-order', 'media-feature-range-notation']
+      .filter((rule) => rule in core.rules)
+      .map((rule) => [rule, core.rules[rule]]),
+  );
 }
 
 module.exports = {

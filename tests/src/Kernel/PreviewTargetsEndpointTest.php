@@ -251,6 +251,48 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
   }
 
   /**
+   * Tests that the owner can read and replace the consumer's layouts.
+   *
+   * A PUT without "layouts" leaves them as they are, so a frontend that only
+   * registers targets does not wipe them.
+   */
+  public function testLayoutsRoundTrip(): void {
+    $this->setCurrentUser($this->owner);
+    $uuid = $this->consumer->uuid();
+    $targets = [['label' => 'Local', 'url' => 'http://localhost:3000/p?layout=[layout]']];
+
+    $response = $this->call('PUT', ['targets' => $targets, 'layouts' => ['default', 'preview']], $uuid);
+    $this->assertSame(200, $response->getStatusCode());
+    $this->assertSame(['default', 'preview'], json_decode((string) $response->getContent(), TRUE)['layouts']);
+
+    $this->assertSame(200, $this->call('PUT', ['targets' => $targets], $uuid)->getStatusCode());
+    $data = json_decode((string) $this->call('GET', consumer_uuid: $uuid)->getContent(), TRUE);
+    $this->assertSame(['default', 'preview'], $data['layouts']);
+
+    $this->assertSame(200, $this->call('PUT', ['targets' => $targets, 'layouts' => []], $uuid)->getStatusCode());
+    $data = json_decode((string) $this->call('GET', consumer_uuid: $uuid)->getContent(), TRUE);
+    $this->assertSame([], $data['layouts']);
+  }
+
+  /**
+   * Tests that invalid layouts are rejected and change nothing.
+   */
+  public function testInvalidLayoutsAreRejected(): void {
+    $this->setCurrentUser($this->owner);
+    $uuid = $this->consumer->uuid();
+    $targets = [['label' => 'Local', 'url' => 'http://localhost:3000/p']];
+
+    $this->assertSame(422, $this->call('PUT', ['targets' => $targets, 'layouts' => 'default'], $uuid)->getStatusCode());
+    $this->assertSame(422, $this->call('PUT', ['targets' => $targets, 'layouts' => [['name' => 'default']]], $uuid)->getStatusCode());
+    $this->assertSame(422, $this->call('PUT', ['targets' => $targets, 'layouts' => ['not a name']], $uuid)->getStatusCode());
+
+    // What is stored, not what the rejected request left on the cached entity.
+    $this->container->get('entity_type.manager')->getStorage('consumer')->resetCache([$this->consumer->id()]);
+    $data = json_decode((string) $this->call('GET', consumer_uuid: $uuid)->getContent(), TRUE);
+    $this->assertSame([], $data['layouts']);
+  }
+
+  /**
    * Returns the stored targets of the test consumer, freshly loaded.
    *
    * @return array<int, array{label: string, url: string}>

@@ -1,0 +1,7 @@
+name: 'Consumer Node Preview Olivero test'
+type: theme
+description: 'An Olivero sub-theme with no tabs library of its own.'
+package: Testing
+base theme: olivero
+core_version_requirement: ^10.3 || ^11
+hidden: true

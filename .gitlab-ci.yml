@@ -93,14 +93,12 @@ phpunit (previous major):
 #
 # Coverage runs in GitHub Actions, not here.
 #
-# This module has kernel tests only. The shared template always starts a
-# Selenium container and a chromedriver container for the phpunit job
-# anyway. Nothing here talks to them. They just eat CPU and memory on the
-# runner, alongside the actual test run. Keep only the database service.
+# The FunctionalJavascript tests drive a browser, so the job keeps the
+# shared template's Selenium and chromedriver services.
 #
 # resource_group makes GitLab run one phpunit job at a time, project-wide.
 # Without it, two MRs pushed close together can still fight over the same
-# runner, even with the services trimmed. Confirmed directly: the same
+# runner. Confirmed directly: the same
 # commit passes alone and fails when it runs next to another branch's job.
 #
 # Even alone and serialized, some failures still happen. Confirmed
@@ -113,9 +111,6 @@ phpunit (previous major):
 # outright.
 ################
 phpunit:
-  services:
-    - name: "$_CONFIG_DOCKERHUB_ROOT/$_TARGET_DB_TYPE-$_TARGET_DB_VERSION:$_TARGET_DB_IMAGE_TAG"
-      alias: database
   resource_group: phpunit
   retry:
     max: 2

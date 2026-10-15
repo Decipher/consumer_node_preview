@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- DrupalCI PHPUnit configuration. No <source> or <coverage> section: source
      discovery recurses through the symlinked extension under process isolation
-     on DrupalCI. DrupalCI exports SIMPLETEST_BASE_URL and SIMPLETEST_DB itself,
-     so this file must not set them. -->
+     on DrupalCI. DrupalCI exports SIMPLETEST_BASE_URL, SIMPLETEST_DB and
+     MINK_DRIVER_ARGS_WEBDRIVER itself, the last pointing at its Selenium
+     service, so this file must not set them. -->
 <!-- Drupal 11 PHPUnit configuration. -->
 <!-- For how to customize PHPUnit configuration, see web/core/tests/README.md. -->
 <!-- TODO set checkForUnintentionallyCoveredCode="true" once https://www.drupal.org/node/2626832 is resolved. -->
@@ -55,8 +56,6 @@
         <env name="MINK_DRIVER_CLASS" value=""/>
         <!-- Example for changing the driver args to mink tests MINK_DRIVER_ARGS value: '["http://127.0.0.1:8510"]' -->
         <env name="MINK_DRIVER_ARGS" value=""/>
-        <!-- Example for changing the driver args to webdriver tests MINK_DRIVER_ARGS_WEBDRIVER value: '["chrome", { "goog:chromeOptions": { "w3c": false } }, "http://localhost:4444/wd/hub"]' For using the Firefox browser, replace "chrome" with "firefox" -->
-        <env name="MINK_DRIVER_ARGS_WEBDRIVER" value='["chrome", {"browserName": "chrome", "goog:chromeOptions": {"w3c": true, "args": ["--no-sandbox", "--disable-gpu", "--window-size=1280,1024"]}}, "http://localhost:4444"]' force="true"/>
     </php>
     <extensions>
         <!-- Functional tests HTML output logging. -->

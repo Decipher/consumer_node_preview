@@ -36,6 +36,7 @@ endef
 .PHONY: assemble build debug debug-off debug-on delete describe destroy drush help info lint lint-fix login provision reset start stop test xdebug xdebug-off xdebug-on
 .PHONY: test-unit test-kernel test-functional
 .PHONY: test-functional-javascript browser-start browser-stop
+.PHONY: test-javascript test-js
 
 help:
 	@echo "COMMANDS"
@@ -55,6 +56,7 @@ help:
 	@echo "test                       - Run all tests."
 	@echo "test-functional            - Run functional tests."
 	@echo "test-functional-javascript - Run FunctionalJavascript tests."
+	@echo "test-javascript            - Run JavaScript unit tests (alias: test-js)."
 	@echo "test-kernel                - Run kernel tests."
 	@echo "test-unit                  - Run unit tests."
 	@echo "browser-start              - Start the browser for FunctionalJavascript tests."
@@ -154,8 +156,12 @@ ifneq (,$(filter $(firstword $(MAKECMDGOALS)),$(TEST_TARGETS)))
 endif
 
 test:
+	$(MAKE) browser-start
 	$(call title,Running PHPUnit)
+	export WEBDRIVER_PORT="$$(./.devtools/info webdriver-port)" && \
 	pushd "build" >/dev/null || exit 1 && php -d pcov.directory=.. vendor/bin/phpunit $(TEST_RUN_ARGS) && popd >/dev/null || exit 1
+	$(call title,Running Jest)
+	pushd "build" >/dev/null || exit 1 && ([ ! -d node_modules ] || npm test) && popd >/dev/null || exit 1
 
 test-unit:
 	pushd "build" >/dev/null || exit 1 && \
@@ -178,6 +184,13 @@ test-functional-javascript:
 	pushd "build" >/dev/null || exit 1 && \
 	php -d pcov.directory=.. vendor/bin/phpunit --testsuite functional-javascript $(TEST_RUN_ARGS) && \
 	popd >/dev/null || exit 1
+
+test-javascript:
+	pushd "build" >/dev/null || exit 1 && \
+	([ ! -d node_modules ] || npm test) && \
+	popd >/dev/null || exit 1
+
+test-js: test-javascript
 
 browser-start:
 	./.devtools/browser start

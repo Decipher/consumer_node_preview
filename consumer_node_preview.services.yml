@@ -8,3 +8,5 @@ services:
     class: Drupal\consumer_node_preview\PreviewTargetsProvider
     arguments:
       - '@entity_type.manager'
+      - '@jsonapi.resource_type.repository'
+      - '@entity_field.manager'

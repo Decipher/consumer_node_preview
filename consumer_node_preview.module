@@ -10,7 +10,6 @@ declare(strict_types=1);
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Field\BaseFieldDefinition;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
-use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 
 /**
@@ -21,7 +20,7 @@ function consumer_node_preview_entity_base_field_info(EntityTypeInterface $entit
   if ($entity_type->id() === 'consumer') {
     $fields['preview_targets'] = BaseFieldDefinition::create('consumer_preview_target')
       ->setLabel(new TranslatableMarkup('Preview targets'))
-      ->setDescription(new TranslatableMarkup('Frontend URLs that render node previews for this consumer. The URL can use the tokens [jsonapi_node_preview] and [view_mode].'))
+      ->setDescription(new TranslatableMarkup('Frontend URLs that render node previews for this consumer. The URL can use the tokens [jsonapi_node_preview], [jsonapi_node_preview_path], [uuid] and [view_mode].'))
       ->setCardinality(FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED)
       ->setTranslatable(FALSE)
       ->setDisplayOptions('form', [
@@ -40,58 +39,11 @@ function consumer_node_preview_theme(array $existing, string $type, string $them
   return [
     'consumer_node_preview' => [
       'variables' => [
-        'label' => NULL,
-        'url' => NULL,
-        'view_mode_id' => NULL,
+        'drupal' => [],
+        'targets' => [],
+        'active_target' => NULL,
+        'jsonapi_url' => NULL,
       ],
     ],
   ];
-}
-
-/**
- * Implements hook_form_FORM_ID_alter() for node_preview_form_select.
- */
-function consumer_node_preview_form_node_preview_form_select_alter(array &$form, FormStateInterface $form_state): void {
-  /** @var \Drupal\consumer_node_preview\PreviewTargetsProviderInterface $provider */
-  $provider = \Drupal::service('consumer_node_preview.targets_provider');
-  $options = $provider->getTargetOptions();
-  if (!$options) {
-    return;
-  }
-
-  $frontend = \Drupal::request()->query->get('frontend');
-  $form['frontend'] = [
-    '#type' => 'select',
-    '#title' => t('Frontend'),
-    '#options' => ['' => t('- Drupal -')] + $options,
-    '#default_value' => is_string($frontend) ? $frontend : '',
-    '#attributes' => [
-      'data-drupal-autosubmit' => TRUE,
-    ],
-    '#weight' => 0,
-  ];
-  $form['view_mode']['#weight'] = 1;
-  $form['submit']['#weight'] = 2;
-  $form['#submit'] = ['consumer_node_preview_form_node_preview_form_select_submit'];
-}
-
-/**
- * Submit handler for the node preview select form.
- */
-function consumer_node_preview_form_node_preview_form_select_submit(array &$form, FormStateInterface $form_state): void {
-  $route_parameters = [
-    'node_preview' => $form_state->getValue('uuid'),
-    'view_mode_id' => $form_state->getValue('view_mode'),
-  ];
-  $options = [];
-  $frontend = $form_state->getValue('frontend');
-  if (is_string($frontend) && $frontend !== '') {
-    $options['query']['frontend'] = $frontend;
-  }
-  $query = \Drupal::request()->query;
-  if ($query->has('destination')) {
-    $options['query']['destination'] = $query->get('destination');
-    $query->remove('destination');
-  }
-  $form_state->setRedirect('entity.node.preview', $route_parameters, $options);
 }

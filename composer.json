@@ -1,11 +1,11 @@
 {
     "name": "drupal/consumer_node_preview",
-    "description": "Lets each consumer register the frontend URLs that render node previews.",
+    "description": "Shows unsaved content in decoupled frontends from Drupal's Preview button.",
     "type": "drupal-module",
     "license": "GPL-2.0-or-later",
     "authors": [
         {
-            "name": "Stuart Clark (Deciphered)",
+            "name": "Stuart Clark",
             "homepage": "https://www.drupal.org/u/deciphered",
             "role": "Maintainer"
         }

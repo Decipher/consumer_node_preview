@@ -235,6 +235,42 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   }
 
   /**
+   * Tests that a default naming an unpublished consumer's target falls back.
+   *
+   * It falls back to the first target in the picker.
+   */
+  public function testDefaultForUnpublishedConsumerFallsBack(): void {
+    $hidden = $this->createConsumer('Hidden', [
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p'],
+    ]);
+    $hidden->set('status', FALSE)->save();
+    $shown = $this->createConsumer('Shown', [
+      ['label' => 'Live', 'url' => 'https://example.com/p'],
+    ]);
+
+    $this->setSetting('consumer_node_preview', ['default' => $hidden->id() . ':0']);
+    $this->assertSame($shown->id() . ':0', $this->provider->getDefaultKey());
+  }
+
+  /**
+   * Tests that endpoint tokens stay in the URL when there is no endpoint.
+   *
+   * A visible token is easier to debug than an empty fragment.
+   */
+  public function testEndpointTokensStayWhenThereIsNoEndpoint(): void {
+    // JSON:API has no resource type for a bundle that does not exist.
+    $node = Node::create(['type' => 'missing', 'title' => 'Test']);
+
+    $url = $this->provider->resolveUrl(
+      'http://localhost:3000/p#[jsonapi_node_preview]|[jsonapi_node_preview_path]',
+      $node,
+      'full',
+    );
+
+    $this->assertSame('http://localhost:3000/p#[jsonapi_node_preview]|[jsonapi_node_preview_path]', $url);
+  }
+
+  /**
    * Returns the preview_targets violations of a consumer with one target.
    *
    * @param array{label: string, url: string} $target

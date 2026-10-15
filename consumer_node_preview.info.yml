@@ -1,8 +1,9 @@
 name: Consumer Node Preview
 type: module
-description: Lets each consumer register the frontend URLs that render node previews.
+description: "Shows unsaved content in decoupled frontends from Drupal's Preview button."
 package: Web services
 core_version_requirement: ^10.3 || ^11
+configure: entity.consumer.collection
 dependencies:
   - consumers:consumers
   - drupal:jsonapi

@@ -171,12 +171,36 @@ of `consumer`, the `X-Consumer-ID` header or a `consumerId` query parameter can
 name the consumer by its client ID. A request that doesn't name a known
 consumer gets a 404.
 
+A frontend can also register only its own target, with a PATCH:
+
+```text
+PATCH /api/consumer-node-preview/targets?consumer=<uuid>
+Content-Type: application/json
+
+{
+  "target": {"label": "Local", "url": "http://localhost:3000/node/preview?vm=[view_mode]#[jsonapi_node_preview]"},
+  "layouts": ["default", "preview"]
+}
+```
+
+The PATCH replaces the consumer's target with the same label, in its place.
+If there is none, it adds the target at the end. The other targets do not
+change. `layouts` is optional, as for a PUT. The answer is the same as for a
+GET.
+
+A PATCH records the time it registered the target. A PUT records no time. A
+target that a PUT or the consumer form leaves unchanged, with the same label
+and URL, keeps its time. A target with a new label or URL has no time, as a
+target added by hand has none.
+
+### Access
+
 Access needs the `register consumer node preview targets` permission, and
 ownership of the consumer or the `administer consumer entities` permission.
-`X-Consumer-ID` only selects a consumer. It never grants access. A PUT with
-the session cookie needs the `X-CSRF-Token` header from `/session/token`. A
-PUT from a browser on another origin also needs `PUT` in the CORS
-`allowedMethods`.
+`X-Consumer-ID` only selects a consumer. It never grants access. A PUT or
+PATCH with the session cookie needs the `X-CSRF-Token` header from
+`/session/token`. A PUT or PATCH from a browser on another origin also needs
+that method in the CORS `allowedMethods`.
 
 ## Troubleshooting
 

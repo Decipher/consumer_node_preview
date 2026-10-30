@@ -85,6 +85,13 @@ A target that its frontend registers expires when the frontend stops
 registering it. See "Registering targets over the API". A target that you add
 by hand, on the consumer form or in settings.php, never expires.
 
+When the preview screen opens, the editor's browser asks each frontend's
+origin for a response, with a time limit of 3 seconds. A frontend that does
+not answer shows "(not responding)" after its label in the Frontend picker.
+You can still pick it, because a frontend that is asleep can wake up when you
+open it. The check runs after the page loads, so it does not delay the
+preview. A target that is a path on Drupal's own site is not checked.
+
 Targets that differ per environment can live in settings.php. They come
 first in the Frontend picker, in a group labelled **Site**:
 

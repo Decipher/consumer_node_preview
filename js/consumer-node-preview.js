@@ -1,7 +1,7 @@
 /**
  * @file
  * Tabs, view mode, frontend targets, layouts, widths and the JSON:API
- * document on the preview.
+ * document on the preview. It also checks which frontends answer.
  */
 
 /**
@@ -63,6 +63,103 @@
       );
     }
   }
+
+  // How long a frontend has to answer the check, in milliseconds.
+  const CHECK_TIMEOUT = 3000;
+
+  /**
+   * Tells whether a frontend's origin answers.
+   *
+   * The request is "no-cors", so any response counts, even an opaque one.
+   * Only a network error or no answer in time counts as silence.
+   *
+   * @param {string} origin
+   *   The origin to ask.
+   *
+   * @return {Promise<boolean>}
+   *   Whether it answered.
+   */
+  async function answers(origin) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT);
+    try {
+      await fetch(`${origin}/`, {
+        mode: 'no-cors',
+        cache: 'no-store',
+        credentials: 'omit',
+        signal: controller.signal,
+      });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Marks the picker's targets whose frontend does not answer.
+   *
+   * Each origin is asked once. A path, or a URL on Drupal's own origin, is
+   * skipped, because the page itself came from there. A marked target can
+   * still be picked, as picking it may wake a sleeping frontend.
+   *
+   * @param {HTMLSelectElement} picker
+   *   The Frontend picker.
+   * @param {object} targetSettings
+   *   The targets, keyed by target key, each with a url.
+   */
+  function checkFrontends(picker, targetSettings) {
+    const origins = new Map();
+    Array.from(picker.options).forEach((option) => {
+      const target = targetSettings[option.value];
+      if (!target) {
+        return;
+      }
+      let origin;
+      try {
+        ({ origin } = new URL(target.url, window.location.href));
+      } catch {
+        return;
+      }
+      if (origin === window.location.origin || origin === 'null') {
+        return;
+      }
+      if (!origins.has(origin)) {
+        origins.set(origin, []);
+      }
+      origins.get(origin).push(option);
+    });
+    origins.forEach((options, origin) => {
+      answers(origin).then((answered) => {
+        if (answered) {
+          return;
+        }
+        options.forEach((option) => {
+          option.setAttribute('data-consumer-node-preview-not-responding', '');
+          option.textContent = Drupal.t('@label (not responding)', {
+            '@label': option.textContent,
+          });
+        });
+      });
+    });
+  }
+
+  /**
+   * Runs a callback once the page and its frame have loaded.
+   *
+   * @param {Function} callback
+   *   The callback.
+   */
+  const whenSettled = (callback) => {
+    if (document.readyState === 'complete') {
+      setTimeout(callback, 0);
+    } else {
+      window.addEventListener('load', () => setTimeout(callback, 0), {
+        once: true,
+      });
+    }
+  };
 
   /**
    * Sets up one preview page.
@@ -252,6 +349,8 @@
         targets.value = remembered;
         show(remembered);
       }
+      // The check never holds up the framed preview.
+      whenSettled(() => checkFrontends(targets, targetSettings));
     }
     if (layouts) {
       layouts.addEventListener('change', () => {

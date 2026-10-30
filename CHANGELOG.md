@@ -44,6 +44,9 @@ and this project adheres to
   where it can still be picked. Cron deletes it after 30 days. The
   `inactive_after` and `delete_after` settings change the two limits. Targets
   added by hand never expire.
+- A check of each frontend from the editor's browser when the preview opens.
+  A frontend that does not answer in 3 seconds shows "(not responding)" in
+  the Frontend picker, and can still be picked.
 - Admin theme support. The preview uses the admin theme when "Use the
   administration theme when editing or creating content" is on, and takes the
   theme's own tab styles in Claro, Gin and Olivero.

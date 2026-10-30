@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\consumer_node_preview;
 
+use Drupal\Component\Datetime\TimeInterface;
 use Drupal\consumers\Entity\ConsumerInterface;
 use Drupal\Core\Entity\EntityFieldManagerInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
@@ -30,6 +31,10 @@ use Symfony\Component\Routing\Exception\RouteNotFoundException;
  *     ],
  *   ],
  *   'default' => 'settings:frontend',
+ *   // Seconds after its last registration that a target goes inactive.
+ *   'inactive_after' => 86400,
+ *   // Seconds after its last registration that cron deletes a target.
+ *   'delete_after' => 2592000,
  * ];
  * @endcode
  */
@@ -44,6 +49,7 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     protected EntityTypeManagerInterface $entityTypeManager,
     protected ResourceTypeRepositoryInterface $resourceTypeRepository,
     protected EntityFieldManagerInterface $entityFieldManager,
+    protected TimeInterface $time,
   ) {}
 
   /**
@@ -84,8 +90,14 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
         'group' => $site,
         'group_id' => 'settings',
         'option_label' => $target['label'],
+        'last_seen' => NULL,
       ];
     }
+    // An inactive target goes in a group at the end. Its option names the
+    // consumer, because the group does not.
+    $inactive = [];
+    $inactive_group = (string) new TranslatableMarkup('Inactive');
+    $inactive_before = $this->time->getRequestTime() - $this->getInactiveAfter();
     $storage = $this->entityTypeManager->getStorage('consumer');
     $ids = $storage->getQuery()
       ->accessCheck(FALSE)
@@ -95,18 +107,32 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     /** @var \Drupal\consumers\Entity\ConsumerInterface $consumer */
     foreach ($storage->loadMultiple($ids) as $consumer) {
       $layouts = $this->getLayouts($consumer);
-      foreach ($this->getTargets($consumer) as $delta => $target) {
-        $targets[$consumer->id() . ':' . $delta] = [
-          'label' => $consumer->label() . ': ' . $target['label'],
-          'url' => $target['url'],
+      foreach ($consumer->get('preview_targets') as $delta => $item) {
+        $last_seen = $item->get('last_seen')->getValue();
+        $last_seen = $last_seen === NULL ? NULL : (int) $last_seen;
+        $label = (string) $item->get('label')->getValue();
+        $target = [
+          'label' => $consumer->label() . ': ' . $label,
+          'url' => (string) $item->get('url')->getValue(),
           'layouts' => $layouts,
           'group' => (string) $consumer->label(),
           'group_id' => (string) $consumer->id(),
-          'option_label' => $target['label'],
+          'option_label' => $label,
+          'last_seen' => $last_seen,
         ];
+        if ($last_seen !== NULL && $last_seen < $inactive_before) {
+          $inactive[$consumer->id() . ':' . $delta] = [
+            'group' => $inactive_group,
+            'group_id' => 'inactive',
+            'option_label' => $target['label'],
+          ] + $target;
+        }
+        else {
+          $targets[$consumer->id() . ':' . $delta] = $target;
+        }
       }
     }
-    return $targets;
+    return $targets + $inactive;
   }
 
   /**
@@ -256,6 +282,62 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
       $replacements['[jsonapi_node_preview_path]'] = (string) $this->getEndpoint($node_preview, FALSE);
     }
     return strtr($url, $replacements);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getInactiveAfter(): int {
+    return $this->secondsSetting('inactive_after', self::INACTIVE_AFTER);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getDeleteAfter(): int {
+    return $this->secondsSetting('delete_after', self::DELETE_AFTER);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function deleteExpiredTargets(): int {
+    $before = $this->time->getRequestTime() - $this->getDeleteAfter();
+    $storage = $this->entityTypeManager->getStorage('consumer');
+    // Unpublished consumers too: their targets would show again on publish.
+    $ids = $storage->getQuery()
+      ->accessCheck(FALSE)
+      ->condition('preview_targets.last_seen', $before, '<')
+      ->execute();
+    $deleted = 0;
+    /** @var \Drupal\consumers\Entity\ConsumerInterface $consumer */
+    foreach ($storage->loadMultiple($ids) as $consumer) {
+      $targets = $consumer->get('preview_targets');
+      $count = $targets->count();
+      $targets->filter(function ($item) use ($before): bool {
+        $last_seen = $item->get('last_seen')->getValue();
+        return $last_seen === NULL || (int) $last_seen >= $before;
+      });
+      if ($targets->count() < $count) {
+        $deleted += $count - $targets->count();
+        $consumer->save();
+      }
+    }
+    return $deleted;
+  }
+
+  /**
+   * Returns a number of seconds from settings.php, or its default.
+   *
+   * @param string $name
+   *   The key in $settings['consumer_node_preview'].
+   * @param int $default
+   *   The value when the setting is missing, or is not a whole number above
+   *   zero.
+   */
+  protected function secondsSetting(string $name, int $default): int {
+    $value = Settings::get('consumer_node_preview', [])[$name] ?? NULL;
+    return is_int($value) && $value > 0 ? $value : $default;
   }
 
   /**

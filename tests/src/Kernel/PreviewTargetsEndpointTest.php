@@ -416,6 +416,27 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
   }
 
   /**
+   * Tests that a PATCH moves an inactive target back to its consumer.
+   */
+  public function testRegisterMovesAnInactiveTargetBack(): void {
+    /** @var \Drupal\consumer_node_preview\PreviewTargetsProviderInterface $provider */
+    $provider = $this->container->get('consumer_node_preview.targets_provider');
+    $now = $this->container->get('datetime.time')->getRequestTime();
+    $this->giveTargets([
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p', 'last_seen' => $now - 2 * 86400],
+    ]);
+    $key = $this->consumer->id() . ':0';
+    $this->assertSame(['Inactive' => [$key => 'App: Local']], $provider->getGroupedTargetOptions());
+
+    $this->setCurrentUser($this->owner);
+    $this->assertSame(200, $this->call('PATCH', [
+      'target' => ['label' => 'Local', 'url' => 'http://localhost:3000/p'],
+    ], $this->consumer->uuid(), time: $now)->getStatusCode());
+    $this->container->get('entity_type.manager')->getStorage('consumer')->resetCache();
+    $this->assertSame(['App' => [$key => 'Local']], $provider->getGroupedTargetOptions());
+  }
+
+  /**
    * Tests that a PATCH can replace the layouts, and keeps them without any.
    */
   public function testRegisterLayouts(): void {

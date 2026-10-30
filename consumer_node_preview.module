@@ -8,9 +8,14 @@
 declare(strict_types=1);
 
 use Drupal\consumer_node_preview\PreviewTargetsProviderInterface;
+use Drupal\Core\Access\AccessResult;
+use Drupal\Core\Access\AccessResultInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Field\BaseFieldDefinition;
+use Drupal\Core\Field\FieldDefinitionInterface;
+use Drupal\Core\Field\FieldItemListInterface;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
+use Drupal\Core\Session\AccountInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 
 /**
@@ -48,6 +53,49 @@ function consumer_node_preview_entity_base_field_info(EntityTypeInterface $entit
       ->setDisplayConfigurable('form', TRUE);
   }
   return $fields;
+}
+
+/**
+ * Implements hook_entity_base_field_info_alter().
+ *
+ * Consumers gives a consumer an owner, but no widget to set it. This shows
+ * the owner on the consumer form, as node's "Authored by" does. A site's
+ * saved form display needs no update: core does not store a field there
+ * while its display is not configurable, so it fills in this default.
+ */
+function consumer_node_preview_entity_base_field_info_alter(array &$fields, EntityTypeInterface $entity_type): void {
+  if ($entity_type->id() !== 'consumer' || !isset($fields['owner_id'])) {
+    return;
+  }
+  $fields['owner_id']
+    ->setLabel(new TranslatableMarkup('Owner'))
+    ->setDescription(new TranslatableMarkup("The owner can register this consumer's preview targets over the API."))
+    ->setDisplayOptions('form', [
+      'type' => 'entity_reference_autocomplete',
+      'weight' => 5,
+      'settings' => [
+        'match_operator' => 'CONTAINS',
+        'size' => 60,
+        'placeholder' => '',
+      ],
+    ])
+    ->setDisplayConfigurable('form', TRUE);
+}
+
+/**
+ * Implements hook_entity_field_access().
+ *
+ * Only a consumer administrator may change a consumer's owner. A user who
+ * edits their own consumer must not hand it to another user. Core hides a
+ * widget the user may not edit, so these users do not see the field.
+ *
+ * @phpstan-param \Drupal\Core\Field\FieldItemListInterface<\Drupal\Core\Field\FieldItemInterface>|null $items
+ */
+function consumer_node_preview_entity_field_access(string $operation, FieldDefinitionInterface $field_definition, AccountInterface $account, ?FieldItemListInterface $items = NULL): AccessResultInterface {
+  if ($operation !== 'edit' || $field_definition->getTargetEntityTypeId() !== 'consumer' || $field_definition->getName() !== 'owner_id') {
+    return AccessResult::neutral();
+  }
+  return AccessResult::forbiddenIf(!$account->hasPermission('administer consumer entities'))->cachePerPermissions();
 }
 
 /**

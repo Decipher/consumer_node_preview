@@ -88,6 +88,11 @@ class NodePreviewThemesTest extends WebDriverTestBase {
    */
   #[DataProvider('themes')]
   public function testThePreviewScreenWorksInTheTheme(string $theme, bool $admin): void {
+    // The build adds Gin only when Composer can resolve it with the core
+    // under test. See scripts/assemble-gin.sh.
+    if ($theme === 'gin' && !$this->container->get('extension.list.theme')->exists('gin')) {
+      $this->markTestSkipped('The gin theme is not in the codebase, because drupal/gin does not resolve with this core.');
+    }
     $this->container->get('theme_installer')->install([$theme]);
     $this->config('system.theme')->set($admin ? 'admin' : 'default', $theme)->save();
     $this->config('node.settings')->set('use_admin_theme', $admin)->save();

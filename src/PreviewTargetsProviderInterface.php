@@ -47,20 +47,39 @@ interface PreviewTargetsProviderInterface {
   /**
    * Returns every target: the site's first, then each published consumer's.
    *
-   * @return array<string, array{label: string, url: string, layouts: list<string>}>
+   * @return array<string, array{label: string, url: string, layouts: list<string>, group: string, option_label: string}>
    *   The targets, keyed "settings:<name>" or "<consumer id>:<delta>". A
    *   consumer target's label starts with the consumer's label, and its
-   *   layouts are the consumer's. A site target lists its own layouts.
+   *   layouts are the consumer's. A site target lists its own layouts. The
+   *   group is the consumer's label, or "Site" for a site target. The option
+   *   label is the target's own label, for use inside its group.
    */
   public function getAllTargets(): array;
 
   /**
-   * Returns select options for every target.
+   * Returns flat select options for every target.
+   *
+   * Use it where a target shows on one line without a group. Each label
+   * names the consumer.
    *
    * @return array<string, string>
    *   The target labels, keyed as getAllTargets() keys them.
    */
   public function getTargetOptions(): array;
+
+  /**
+   * Returns select options for every target, grouped by consumer.
+   *
+   * The site's targets come first, in a "Site" group. Each consumer follows
+   * by label, with its targets in field order. The shape suits the
+   * #options of a Form API select, which renders a nested array as an
+   * optgroup.
+   *
+   * @return array<string, array<string, string>>
+   *   The groups, keyed by group label. Each holds the targets' own labels,
+   *   keyed as getAllTargets() keys them.
+   */
+  public function getGroupedTargetOptions(): array;
 
   /**
    * Returns the target for one key.

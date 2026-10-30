@@ -170,7 +170,7 @@ final class NodePreviewController extends CoreNodePreviewController {
       '#title' => $node_preview->label(),
       '#drupal' => $drupal,
       '#view_mode' => $this->viewModeForm($node_preview),
-      '#frontend' => $targets ? $this->frontendSelect($targets, (string) $active) : [],
+      '#frontend' => $targets ? $this->frontendSelect($this->targetsProvider->getGroupedTargetOptions(), (string) $active) : [],
       '#layout' => $this->layoutSelect($targets, (string) $active, $layout),
       '#targets' => $targets,
       '#active_target' => $active,
@@ -223,20 +223,23 @@ final class NodePreviewController extends CoreNodePreviewController {
    * Builds the frontend picker.
    *
    * It shows even with one target, so the editor sees which one is framed.
+   * The targets are in an optgroup per consumer, and the site's targets
+   * are in a group of their own. A single group keeps its label too, as it
+   * names the consumer that an option no longer does.
    *
-   * @param array<string, array{label: string, url: string, layouts: list<string>}> $targets
-   *   The targets, keyed by target key.
+   * @param array<string, array<string, string>> $options
+   *   The target options, grouped as getGroupedTargetOptions() groups them.
    * @param string $active
    *   The key of the framed target.
    *
    * @return array<string, mixed>
    *   The select element.
    */
-  protected function frontendSelect(array $targets, string $active): array {
+  protected function frontendSelect(array $options, string $active): array {
     return [
       '#type' => 'select',
       '#title' => $this->t('Frontend'),
-      '#options' => array_map(fn(array $target): string => $target['label'], $targets),
+      '#options' => $options,
       '#value' => $active,
       '#name' => 'frontend',
       '#id' => 'consumer-node-preview-target',

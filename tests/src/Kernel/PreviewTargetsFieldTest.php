@@ -114,6 +114,60 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   }
 
   /**
+   * Tests the options grouped by consumer, and the flat options.
+   *
+   * The site's targets come first, in a group of their own. The consumers
+   * follow by label, and each group keeps its targets in field order. The
+   * keys do not change.
+   */
+  public function testOptionsAreGroupedByConsumer(): void {
+    $this->setSetting('consumer_node_preview', [
+      'targets' => ['local' => ['label' => 'Local', 'url' => '/p']],
+    ]);
+    $beta = $this->createConsumer('Beta', [
+      ['label' => 'Staging', 'url' => 'https://stage.beta.example.com/p'],
+      ['label' => 'Live', 'url' => 'https://beta.example.com/p'],
+    ]);
+    $alpha = $this->createConsumer('Alpha', [
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p'],
+    ]);
+
+    $this->assertSame([
+      'Site' => ['settings:local' => 'Local'],
+      'Alpha' => [$alpha->id() . ':0' => 'Local'],
+      'Beta' => [$beta->id() . ':0' => 'Staging', $beta->id() . ':1' => 'Live'],
+    ], $this->provider->getGroupedTargetOptions());
+
+    // A flat list has no group, so its labels still name the consumer.
+    $this->assertSame([
+      'settings:local' => 'Local',
+      $alpha->id() . ':0' => 'Alpha: Local',
+      $beta->id() . ':0' => 'Beta: Staging',
+      $beta->id() . ':1' => 'Beta: Live',
+    ], $this->provider->getTargetOptions());
+
+    $targets = $this->provider->getAllTargets();
+    $this->assertSame('Site', $targets['settings:local']['group']);
+    $this->assertSame('Local', $targets['settings:local']['option_label']);
+    $this->assertSame('Beta', $targets[$beta->id() . ':1']['group']);
+    $this->assertSame('Live', $targets[$beta->id() . ':1']['option_label']);
+    $this->assertSame('Beta: Live', $targets[$beta->id() . ':1']['label']);
+  }
+
+  /**
+   * Tests that a consumer without targets gets no group.
+   */
+  public function testConsumerWithoutTargetsHasNoGroup(): void {
+    $this->createConsumer('Empty', []);
+    $alpha = $this->createConsumer('Alpha', [
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p'],
+    ]);
+    $this->assertSame([
+      'Alpha' => [$alpha->id() . ':0' => 'Local'],
+    ], $this->provider->getGroupedTargetOptions());
+  }
+
+  /**
    * Tests that URL tokens resolve to the preview endpoint.
    */
   public function testResolveUrl(): void {

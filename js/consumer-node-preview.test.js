@@ -100,7 +100,8 @@ const at = (name, layout, viewMode = 'full') =>
  * @param {object} [options]
  *   The page to build.
  * @param {Array} [options.targets]
- *   The frontend targets, with key, label and url.
+ *   The frontend targets, with key, label and url, and a group for a
+ *   consumer's target.
  * @param {string} [options.jsonapi]
  *   The JSON:API URL, or an empty string for a bundle without one.
  * @param {string} [options.active]
@@ -124,12 +125,24 @@ const markup = ({
         aria-controls="consumer-node-preview-${id}" aria-selected="${id === active}"
         data-consumer-node-preview-tab="${id}">${label}</a>
     </li>`;
+  // The controller puts each target in its group's optgroup.
+  const groups = targets.reduce((result, each, index) => {
+    const option = `<option value="${each.key}"${index === 0 ? ' selected' : ''}>${each.label}</option>`;
+    const last = result[result.length - 1];
+    const group = each.group || 'Site';
+    if (last && last.label === group) {
+      last.options.push(option);
+    } else {
+      result.push({ label: group, options: [option] });
+    }
+    return result;
+  }, []);
   const picker =
     targets.length > 1
-      ? `<select data-consumer-node-preview-target>${targets
+      ? `<select data-consumer-node-preview-target>${groups
           .map(
-            (each, index) =>
-              `<option value="${each.key}"${index === 0 ? ' selected' : ''}>${each.label}</option>`,
+            (group) =>
+              `<optgroup label="${group.label}">${group.options.join('')}</optgroup>`,
           )
           .join('')}</select>`
       : '';
@@ -461,6 +474,23 @@ describe('Drupal.behaviors.consumerNodePreview', () => {
       window.history.replaceState(null, '', '/?frontend=settings:one');
       attach();
       expect(frame().getAttribute('src')).toBe(url('one'));
+    });
+
+    it('frames a frontend picked in another group', () => {
+      const targets = [
+        ...LAYOUT_TARGETS.slice(0, 2),
+        { ...LAYOUT_TARGETS[2], key: '3:0', group: 'Nuxt' },
+      ];
+      attach({ targets });
+      expect(picker().querySelectorAll('optgroup')).toHaveLength(2);
+      pick('3:0');
+      expect(picker().selectedOptions[0].parentElement.label).toBe('Nuxt');
+      expect(frame().getAttribute('src')).toBe(at('three', 'default'));
+      expect(window.localStorage.getItem('consumer_node_preview.target')).toBe(
+        '3:0',
+      );
+      pick('settings:two');
+      expect(frame().getAttribute('src')).toBe(url('two'));
     });
 
     it('works with one frontend and no picker', () => {

@@ -62,6 +62,9 @@ function consumer_node_preview_entity_base_field_info(EntityTypeInterface $entit
  * the owner on the consumer form, as node's "Authored by" does. A site's
  * saved form display needs no update: core does not store a field there
  * while its display is not configurable, so it fills in this default.
+ *
+ * Remove this once Consumers shows the owner itself:
+ * https://git.drupalcode.org/project/consumers/-/work_items/3610995
  */
 function consumer_node_preview_entity_base_field_info_alter(array &$fields, EntityTypeInterface $entity_type): void {
   if ($entity_type->id() !== 'consumer' || !isset($fields['owner_id'])) {

@@ -196,27 +196,26 @@ class NodePreviewControllerTest extends KernelTestBase {
     $this->assertSame('{node_preview}', $route->getRequirement('_node_preview_access'));
     $this->assertSame('node_preview', $route->getOption('parameters')['node_preview']['type']);
 
-    // A body whose summary only the teaser shows, so the view modes differ.
-    // Drupal 10 core installs the body storage with the node module.
-    if (!FieldStorageConfig::loadByName('node', 'body')) {
-      FieldStorageConfig::create(['field_name' => 'body', 'entity_type' => 'node', 'type' => 'text_with_summary'])->save();
-    }
-    FieldConfig::create(['field_name' => 'body', 'entity_type' => 'node', 'bundle' => 'page', 'settings' => ['display_summary' => TRUE]])->save();
+    // A text field that the teaser trims, so the view modes differ. The field
+    // is not the body. Each core version makes the body with a different
+    // field type, and Drupal 11.5 moves the summary type to its own module.
+    FieldStorageConfig::create(['field_name' => 'field_text', 'entity_type' => 'node', 'type' => 'text_long'])->save();
+    FieldConfig::create(['field_name' => 'field_text', 'entity_type' => 'node', 'bundle' => 'page'])->save();
     $displays = $this->container->get('entity_display.repository');
-    $displays->getViewDisplay('node', 'page')->setComponent('body', ['type' => 'text_default'])->save();
-    $displays->getViewDisplay('node', 'page', 'teaser')->setComponent('body', ['type' => 'text_summary_or_trimmed'])->save();
+    $displays->getViewDisplay('node', 'page')->setComponent('field_text', ['type' => 'text_default'])->save();
+    $displays->getViewDisplay('node', 'page', 'teaser')->setComponent('field_text', ['type' => 'text_trimmed', 'settings' => ['trim_length' => 20]])->save();
     $node = $this->node();
-    $node->set('body', ['value' => 'The whole body.', 'summary' => 'Only the summary.', 'format' => 'plain_text']);
+    $node->set('field_text', ['value' => 'Only the start. The rest of the text.', 'format' => 'plain_text']);
 
     $response = NodePreviewController::create($this->container)->drupal($node, 'teaser');
     $command = $response->getCommands()[0];
     $this->assertSame('[data-consumer-node-preview-drupal]', $command['selector']);
     $this->assertStringContainsString('Unsaved', (string) $command['data']);
-    $this->assertStringContainsString('Only the summary.', (string) $command['data']);
-    $this->assertStringNotContainsString('The whole body.', (string) $command['data']);
+    $this->assertStringContainsString('Only the start.', (string) $command['data']);
+    $this->assertStringNotContainsString('The rest of the text.', (string) $command['data']);
 
     $full = (string) NodePreviewController::create($this->container)->drupal($node, 'full')->getCommands()[0]['data'];
-    $this->assertStringContainsString('The whole body.', $full);
+    $this->assertStringContainsString('The rest of the text.', $full);
   }
 
   /**

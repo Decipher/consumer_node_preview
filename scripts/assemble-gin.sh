@@ -23,6 +23,18 @@ code=$?
 
 if [ "${code}" -eq 0 ]; then
   echo "[gin] Installed drupal/gin ${constraint}."
+
+  # The require runs the Drupal scaffold again. The scaffold replaces the
+  # index.php and default.settings.php files, so the deprecation edits from
+  # .devtools/assemble are lost. Apply them again. Each edit is applied only
+  # when it is missing.
+  if [ "${SYMFONY_DEPRECATIONS_HELPER:-}" = "disabled" ]; then
+    line='error_reporting(E_ALL & ~E_DEPRECATED);'
+    settings=build/web/sites/default/default.settings.php
+    grep -qF "${line}" "${settings}" || echo "${line}" >>"${settings}"
+    grep -qF "${line}" build/web/index.php || sed -i "1s/^<?php/<?php ${line//&/\\&}/" build/web/index.php
+    echo "[gin] Disabled deprecation notices in functional tests again."
+  fi
   exit 0
 fi
 

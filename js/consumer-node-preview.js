@@ -82,19 +82,17 @@
   async function answers(origin) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT);
-    try {
-      await fetch(`${origin}/`, {
-        mode: 'no-cors',
-        cache: 'no-store',
-        credentials: 'omit',
-        signal: controller.signal,
-      });
-      return true;
-    } catch {
-      return false;
-    } finally {
-      clearTimeout(timer);
-    }
+    const answered = await fetch(`${origin}/`, {
+      mode: 'no-cors',
+      cache: 'no-store',
+      credentials: 'omit',
+      signal: controller.signal,
+    }).then(
+      () => true,
+      () => false,
+    );
+    clearTimeout(timer);
+    return answered;
   }
 
   /**

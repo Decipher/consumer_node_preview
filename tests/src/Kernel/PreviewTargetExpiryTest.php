@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\consumer_node_preview\Kernel;
 
 use Drupal\consumers\Entity\Consumer;
+use Drupal\Core\Field\FieldItemInterface;
 use Drupal\KernelTests\KernelTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -275,8 +276,8 @@ class PreviewTargetExpiryTest extends KernelTestBase {
 
     // Each old stamp goes to one new target only.
     $reloaded = Consumer::load($alpha->id());
-    $stamps = array_map(fn($item) => $item->get('last_seen')->getValue(), iterator_to_array($reloaded->get('preview_targets')));
-    $this->assertSame([1_700_000_100, NULL, 1_700_000_200, NULL], array_map(fn($stamp) => $stamp === NULL ? NULL : (int) $stamp, $stamps));
+    $stamps = array_map(fn(FieldItemInterface $item) => $item->get('last_seen')->getValue(), iterator_to_array($reloaded->get('preview_targets')));
+    $this->assertSame([1_700_000_100, NULL, 1_700_000_200, NULL], array_map(fn($stamp): ?int => $stamp === NULL ? NULL : (int) $stamp, $stamps));
 
     // A stamp the save sends wins over the stored one.
     $reloaded->get('preview_targets')->get(0)->set('last_seen', 1_800_000_000);

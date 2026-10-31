@@ -91,6 +91,7 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
         'group_id' => 'settings',
         'option_label' => $target['label'],
         'last_seen' => NULL,
+        'inactive' => FALSE,
       ];
     }
     // An inactive target goes in a group at the end. Its option names the
@@ -119,12 +120,14 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
           'group_id' => (string) $consumer->id(),
           'option_label' => $label,
           'last_seen' => $last_seen,
+          'inactive' => FALSE,
         ];
         if ($last_seen !== NULL && $last_seen < $inactive_before) {
           $inactive[$consumer->id() . ':' . $delta] = [
             'group' => $inactive_group,
             'group_id' => 'inactive',
             'option_label' => $target['label'],
+            'inactive' => TRUE,
           ] + $target;
         }
         else {

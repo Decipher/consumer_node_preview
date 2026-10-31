@@ -327,6 +327,28 @@ class NodePreviewControllerTest extends KernelTestBase {
   }
 
   /**
+   * Tests that the preview flags an inactive target for the browser check.
+   *
+   * The browser check must not ask an inactive target's frontend, so the
+   * settings say which targets are inactive.
+   */
+  public function testSettingsFlagInactiveTargets(): void {
+    $consumer = Consumer::create([
+      'label' => 'Nuxt',
+      'client_id' => 'nuxt',
+      'preview_targets' => [
+        ['label' => 'By hand', 'url' => 'https://staging.example.com/preview#[jsonapi_node_preview]'],
+        ['label' => 'Asleep', 'url' => 'https://asleep.example.com/preview#[jsonapi_node_preview]', 'last_seen' => 1],
+      ],
+    ]);
+    $consumer->save();
+
+    $settings = $this->preview($this->node())['#attached']['drupalSettings']['consumerNodePreview'];
+    $this->assertFalse($settings['targets'][$consumer->id() . ':0']['inactive']);
+    $this->assertTrue($settings['targets'][$consumer->id() . ':1']['inactive']);
+  }
+
+  /**
    * Tests that a stale frontend key in the query falls back to the default.
    */
   public function testStaleQueryKeyFallsBackToTheDefault(): void {

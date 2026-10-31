@@ -101,8 +101,10 @@
    * Marks the picker's targets whose frontend does not answer.
    *
    * Each origin is asked once. A path, or a URL on Drupal's own origin, is
-   * skipped, because the page itself came from there. A marked target can
-   * still be picked, as picking it may wake a sleeping frontend.
+   * skipped, because the page itself came from there. An inactive target is
+   * skipped too. It has not registered for a while, and the check must not
+   * wake a sleeping frontend. A marked target can still be picked, as picking
+   * it may wake a sleeping frontend.
    *
    * @param {HTMLSelectElement} picker
    *   The Frontend picker.
@@ -113,7 +115,7 @@
     const origins = new Map();
     Array.from(picker.options).forEach((option) => {
       const target = targetSettings[option.value];
-      if (!target) {
+      if (!target || target.inactive) {
         return;
       }
       let origin;

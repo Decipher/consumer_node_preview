@@ -58,6 +58,7 @@ const settings = (targets) => ({
           name,
           label: name.toUpperCase(),
         })),
+        ...(each.inactive ? { inactive: true } : {}),
       },
     ]),
   ),
@@ -840,6 +841,29 @@ describe('Drupal.behaviors.consumerNodePreview', () => {
         expect(silent(each.key)).toBe(false);
         expect(option(each.key).textContent).toBe(each.label);
       });
+    });
+
+    it('does not ask the origin of an inactive target', async () => {
+      fetch.mockRejectedValue(new TypeError('Failed to fetch'));
+      const targets = [
+        ...REMOTE_TARGETS,
+        {
+          key: '3:0',
+          label: 'Asleep',
+          url: `http://asleep.example.com/?mode=${VIEW_MODE}`,
+          group: 'Inactive',
+          inactive: true,
+        },
+      ];
+      attach({ targets });
+      await settle();
+      await settle();
+      expect(fetch.mock.calls.map(([resource]) => resource)).toEqual([
+        'http://one.example.com/',
+        'https://two.example.com:8443/',
+      ]);
+      expect(silent('3:0')).toBe(false);
+      expect(option('3:0').textContent).toBe('Asleep');
     });
 
     it('marks the targets of an origin that does not answer', async () => {

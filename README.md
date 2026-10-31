@@ -90,7 +90,9 @@ origin for a response, with a time limit of 3 seconds. A frontend that does
 not answer shows "(not responding)" after its label in the Frontend picker.
 You can still pick it, because a frontend that is asleep can wake up when you
 open it. The check runs after the page loads, so it does not delay the
-preview. A target that is a path on Drupal's own site is not checked.
+preview. A target that is a path on Drupal's own site is not checked. A
+target in the Inactive group is not checked either, so the check never wakes a
+frontend that is asleep.
 
 Targets that differ per environment can live in settings.php. They come
 first in the Frontend picker, in a group labelled **Site**:

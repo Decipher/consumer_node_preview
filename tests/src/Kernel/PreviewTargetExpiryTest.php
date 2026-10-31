@@ -169,6 +169,12 @@ class PreviewTargetExpiryTest extends KernelTestBase {
     $this->assertSame($this->now - 86401, $targets[$alpha->id() . ':1']['last_seen']);
     $this->assertNull($targets[$alpha->id() . ':2']['last_seen']);
     $this->assertNull($targets['settings:site']['last_seen']);
+    // The browser check skips a target that is flagged inactive.
+    $this->assertTrue($targets[$alpha->id() . ':1']['inactive']);
+    $this->assertTrue($targets[$beta->id() . ':0']['inactive']);
+    $this->assertFalse($targets[$alpha->id() . ':0']['inactive']);
+    $this->assertFalse($targets[$alpha->id() . ':2']['inactive']);
+    $this->assertFalse($targets['settings:site']['inactive']);
   }
 
   /**

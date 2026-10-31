@@ -60,7 +60,7 @@ interface PreviewTargetsProviderInterface {
    * The inactive targets come last. An inactive target is a registered one
    * whose last registration is older than getInactiveAfter().
    *
-   * @return array<string, array{label: string, url: string, layouts: list<string>, group: string, group_id: string, option_label: string, last_seen: int|null}>
+   * @return array<string, array{label: string, url: string, layouts: list<string>, group: string, group_id: string, option_label: string, last_seen: int|null, inactive: bool}>
    *   The targets, keyed "settings:<name>" or "<consumer id>:<delta>". A
    *   consumer target's label starts with the consumer's label, and its
    *   layouts are the consumer's. A site target lists its own layouts. The
@@ -69,7 +69,8 @@ interface PreviewTargetsProviderInterface {
    *   "inactive". The option label is the target's own label, for use inside
    *   its group. In the Inactive group, it is the label with the consumer's.
    *   The last_seen value is the time of the last registration, or NULL for
-   *   a target added by hand.
+   *   a target added by hand. The inactive value is TRUE for a target in the
+   *   Inactive group.
    */
   public function getAllTargets(): array;
 

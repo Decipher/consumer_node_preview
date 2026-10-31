@@ -46,7 +46,8 @@ and this project adheres to
   added by hand never expire.
 - A check of each frontend from the editor's browser when the preview opens.
   A frontend that does not answer in 3 seconds shows "(not responding)" in
-  the Frontend picker, and can still be picked.
+  the Frontend picker, and can still be picked. Inactive targets are not
+  checked.
 - Admin theme support. The preview uses the admin theme when "Use the
   administration theme when editing or creating content" is on, and takes the
   theme's own tab styles in Claro, Gin and Olivero.

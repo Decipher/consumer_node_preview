@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\consumer_node_preview\FunctionalJavascript;
 
+use Drupal\consumers\Entity\Consumer;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -213,6 +214,67 @@ class NodePreviewToolbarTest extends WebDriverTestBase {
     $this->getSession()->visit($page_url . '?layout=bare_page');
     $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="/frontend-three"][src*="layout=bare_page"]'));
     $this->assertSame('bare_page', $assert->elementExists('css', '[data-consumer-node-preview-layout]')->getValue());
+  }
+
+  /**
+   * Tests that the picker groups the targets by consumer.
+   *
+   * Picking a target inside a group still frames it, and the layout picker
+   * still follows it.
+   */
+  public function testThePickerGroupsTargetsByConsumer(): void {
+    $beta = Consumer::create([
+      'label' => 'Beta',
+      'client_id' => 'beta',
+      'preview_targets' => [
+        ['label' => 'Staging', 'url' => '/beta-staging?vm=[view_mode]'],
+        ['label' => 'Live', 'url' => '/beta-live?vm=[view_mode]'],
+      ],
+    ]);
+    $beta->save();
+    $alpha = Consumer::create([
+      'label' => 'Alpha',
+      'client_id' => 'alpha',
+      'preview_targets' => [
+        ['label' => 'Local', 'url' => '/alpha-local?vm=[view_mode]&layout=[layout]'],
+      ],
+      'preview_layouts' => ['default', 'bare_page'],
+    ]);
+    $alpha->save();
+
+    $this->preview();
+    $assert = $this->jsAssert();
+    $targets = $assert->elementExists('css', '[data-consumer-node-preview-target]');
+    $layouts = $assert->elementExists('css', '[data-consumer-node-preview-layout]');
+
+    // The site's targets come first, then each consumer by label. An option
+    // shows the target's own label, because its group names the consumer.
+    $groups = $this->getSession()->evaluateScript("Array.from(document.querySelectorAll('[data-consumer-node-preview-target] optgroup')).map((group) => [group.label, Array.from(group.querySelectorAll('option')).map((option) => option.textContent.trim())])");
+    $this->assertSame([
+      ['Site', ['One', 'Two', 'Three']],
+      ['Alpha', ['Local']],
+      ['Beta', ['Staging', 'Live']],
+    ], $groups);
+    $this->assertSame(0, $this->getSession()->evaluateScript("document.querySelectorAll('[data-consumer-node-preview-target] > option').length"));
+
+    $this->getSession()->executeScript('window.consumerNodePreviewTest = true;');
+    $targets->selectOption($beta->id() . ':1');
+    $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="/beta-live?vm=full"]'));
+    $this->assertStringContainsString('/beta-live?vm=full', (string) $assert->elementExists('css', '[data-consumer-node-preview-open]')->getAttribute('href'));
+    $this->assertFalse($layouts->isVisible());
+
+    // The layout picker follows a target in another group.
+    $targets->selectOption($alpha->id() . ':0');
+    $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="/alpha-local?vm=full&layout=default"]'));
+    $this->assertTrue($layouts->isVisible());
+    $layouts->selectOption('Bare page');
+    $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="/alpha-local?vm=full&layout=bare_page"]'));
+    $this->assertTrue($this->getSession()->evaluateScript('window.consumerNodePreviewTest === true'), 'Picking a target reloaded the page.');
+
+    // A reload keeps the target picked in a group, by its key.
+    $this->getSession()->reload();
+    $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="/alpha-local?vm=full&layout=bare_page"]'));
+    $this->assertSame($alpha->id() . ':0', $assert->elementExists('css', '[data-consumer-node-preview-target]')->getValue());
   }
 
   /**

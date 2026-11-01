@@ -22,6 +22,9 @@ and this project adheres to
 - A Frontend picker, Phone, Tablet and Full widths, and a link that opens the
   preview in a new tab. The screen remembers the editor's last tab, width,
   frontend and each frontend's layout.
+- The Frontend picker groups targets by consumer. Each consumer gets a group
+  with its label, and the settings.php targets come first in a Site group.
+  The target keys do not change.
 - Core's View mode select in the tab row. Changing the view mode reloads only
   the frame, and the Drupal tab follows over AJAX.
 - `?frontend=<key>` and `?layout=<name>` query parameters, which pick a target

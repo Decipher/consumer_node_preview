@@ -33,6 +33,13 @@ if [ "${code}" -eq 0 ]; then
     settings=build/web/sites/default/default.settings.php
     grep -qF "${line}" "${settings}" || echo "${line}" >>"${settings}"
     grep -qF "${line}" build/web/index.php || sed -i "1s/^<?php/<?php ${line//&/\\&}/" build/web/index.php
+    # A failed edit stops the assemble. Else the tests fail on notices.
+    for file in "${settings}" build/web/index.php; do
+      if ! grep -qF "${line}" "${file}"; then
+        echo "[gin] Could not edit ${file}." >&2
+        exit 1
+      fi
+    done
     echo "[gin] Disabled deprecation notices in functional tests again."
   fi
   exit 0

@@ -8,6 +8,7 @@ use Drupal\consumers\Entity\ConsumerInterface;
 use Drupal\Core\Entity\EntityFieldManagerInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Site\Settings;
+use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\Core\Url;
 use Drupal\jsonapi\ResourceType\ResourceType;
 use Drupal\jsonapi\ResourceType\ResourceTypeRepositoryInterface;
@@ -75,8 +76,15 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
    */
   public function getAllTargets(): array {
     $targets = [];
+    // The site's own targets share one group. "Site" matches the name
+    // the README gives them: site targets.
+    $site = (string) new TranslatableMarkup('Site');
     foreach ($this->getSiteTargets() as $name => $target) {
-      $targets['settings:' . $name] = $target;
+      $targets['settings:' . $name] = $target + [
+        'group' => $site,
+        'group_id' => 'settings',
+        'option_label' => $target['label'],
+      ];
     }
     $storage = $this->entityTypeManager->getStorage('consumer');
     $ids = $storage->getQuery()
@@ -92,6 +100,9 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
           'label' => $consumer->label() . ': ' . $target['label'],
           'url' => $target['url'],
           'layouts' => $layouts,
+          'group' => (string) $consumer->label(),
+          'group_id' => (string) $consumer->id(),
+          'option_label' => $target['label'],
         ];
       }
     }
@@ -103,6 +114,32 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
    */
   public function getTargetOptions(): array {
     return array_map(fn(array $target): string => $target['label'], $this->getAllTargets());
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getGroupedTargetOptions(?array $targets = NULL): array {
+    $targets ??= $this->getAllTargets();
+    // Find the labels that more than one group uses.
+    $groups = [];
+    foreach ($targets as $target) {
+      $groups[$target['group']][$target['group_id']] = TRUE;
+    }
+    $options = [];
+    foreach ($targets as $key => $target) {
+      $group = $target['group'];
+      // A consumer group with a shared label adds the consumer ID. Then each
+      // group keeps its own heading.
+      if (count($groups[$group]) > 1 && ctype_digit($target['group_id'])) {
+        $group = (string) new TranslatableMarkup('@label (@id)', [
+          '@label' => $group,
+          '@id' => $target['group_id'],
+        ]);
+      }
+      $options[$group][(string) $key] = $target['option_label'];
+    }
+    return $options;
   }
 
   /**

@@ -47,11 +47,12 @@ interface PreviewTargetsProviderInterface {
   /**
    * Returns every target: the site's first, then each published consumer's.
    *
-   * @return array<string, array{label: string, url: string, layouts: list<string>, group: string, option_label: string}>
+   * @return array<string, array{label: string, url: string, layouts: list<string>, group: string, group_id: string, option_label: string}>
    *   The targets, keyed "settings:<name>" or "<consumer id>:<delta>". A
    *   consumer target's label starts with the consumer's label, and its
    *   layouts are the consumer's. A site target lists its own layouts. The
-   *   group is the consumer's label, or "Site" for a site target. The option
+   *   group is the consumer's label, or "Site" for a site target. The group
+   *   ID is the consumer's ID, or "settings" for a site target. The option
    *   label is the target's own label, for use inside its group.
    */
   public function getAllTargets(): array;
@@ -73,13 +74,19 @@ interface PreviewTargetsProviderInterface {
    * The site's targets come first, in a "Site" group. Each consumer follows
    * by label, with its targets in field order. The shape suits the
    * #options of a Form API select, which renders a nested array as an
-   * optgroup.
+   * optgroup. Two groups can have the same label, such as two consumers
+   * with one label. Then each consumer group adds the consumer ID to its
+   * label, so each group stays apart.
+   *
+   * @param array<string, array{group: string, group_id: string, option_label: string}>|null $targets
+   *   (optional) The targets from getAllTargets(), when the caller has them
+   *   already. Else they are loaded again.
    *
    * @return array<string, array<string, string>>
    *   The groups, keyed by group label. Each holds the targets' own labels,
    *   keyed as getAllTargets() keys them.
    */
-  public function getGroupedTargetOptions(): array;
+  public function getGroupedTargetOptions(?array $targets = NULL): array;
 
   /**
    * Returns the target for one key.

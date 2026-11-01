@@ -168,6 +168,55 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   }
 
   /**
+   * Tests that two groups with one label stay apart.
+   *
+   * A consumer labelled "Site", or two consumers with one label, each keep
+   * a group of their own. The group label of such a consumer adds its ID.
+   */
+  public function testSharedGroupLabelsStaySeparate(): void {
+    $this->setSetting('consumer_node_preview', [
+      'targets' => ['local' => ['label' => 'Local', 'url' => '/p']],
+    ]);
+    $site = $this->createConsumer('Site', [
+      ['label' => 'Live', 'url' => 'https://site.example.com/p'],
+    ]);
+    $first = $this->createConsumer('Nuxt', [
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p'],
+    ]);
+    $second = $this->createConsumer('Nuxt', [
+      ['label' => 'Local', 'url' => 'http://localhost:3001/p'],
+    ]);
+    $alpha = $this->createConsumer('Alpha', [
+      ['label' => 'Local', 'url' => 'http://localhost:3002/p'],
+    ]);
+
+    $this->assertSame([
+      'Site' => ['settings:local' => 'Local'],
+      'Alpha' => [$alpha->id() . ':0' => 'Local'],
+      'Nuxt (' . $first->id() . ')' => [$first->id() . ':0' => 'Local'],
+      'Nuxt (' . $second->id() . ')' => [$second->id() . ':0' => 'Local'],
+      'Site (' . $site->id() . ')' => [$site->id() . ':0' => 'Live'],
+    ], $this->provider->getGroupedTargetOptions());
+  }
+
+  /**
+   * Tests that the grouped options can come from targets already loaded.
+   */
+  public function testGroupsTheTargetsItIsGiven(): void {
+    $alpha = $this->createConsumer('Alpha', [
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p'],
+    ]);
+    $targets = $this->provider->getAllTargets();
+    // A consumer added later is not in the given targets.
+    $this->createConsumer('Beta', [
+      ['label' => 'Live', 'url' => 'https://beta.example.com/p'],
+    ]);
+    $this->assertSame([
+      'Alpha' => [$alpha->id() . ':0' => 'Local'],
+    ], $this->provider->getGroupedTargetOptions($targets));
+  }
+
+  /**
    * Tests that URL tokens resolve to the preview endpoint.
    */
   public function testResolveUrl(): void {

@@ -78,7 +78,8 @@ The Frontend picker on the preview screen groups the targets by consumer.
 Each group has the consumer's label, and the groups are in label order. In a
 group, each target shows its own label, in the order the consumer lists them.
 A group shows its label even when it is the only one, so the editor can see
-which consumer the framed target belongs to.
+which consumer the framed target belongs to. When two groups have the same
+label, each consumer group adds the consumer ID, such as "Nuxt (3)".
 
 Targets that differ per environment can live in settings.php. They come
 first in the Frontend picker, in a group labelled **Site**:

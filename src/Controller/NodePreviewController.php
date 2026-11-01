@@ -170,7 +170,7 @@ final class NodePreviewController extends CoreNodePreviewController {
       '#title' => $node_preview->label(),
       '#drupal' => $drupal,
       '#view_mode' => $this->viewModeForm($node_preview),
-      '#frontend' => $targets ? $this->frontendSelect($this->targetsProvider->getGroupedTargetOptions(), (string) $active) : [],
+      '#frontend' => $targets ? $this->frontendSelect($this->targetsProvider->getGroupedTargetOptions($all), (string) $active) : [],
       '#layout' => $this->layoutSelect($targets, (string) $active, $layout),
       '#targets' => $targets,
       '#active_target' => $active,

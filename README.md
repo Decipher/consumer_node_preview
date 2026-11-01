@@ -59,6 +59,9 @@ https://www.drupal.org/i/3367724.
    Consumers**. Add its **Preview targets**: a label and a URL for each
    frontend, such as local, staging and production. **Preview layouts** lists
    the layouts the frontend can render a preview in. The first is the default.
+   **Owner** is the user who may register the consumer's targets over the
+   API. Only users with the `administer consumer entities` permission can
+   change it.
 2. Allow each frontend's origin in the site's `services.yml`. The frontend
    fetches the preview with the editor's session, so it needs credentials:
 
@@ -170,6 +173,14 @@ ownership of the consumer or the `administer consumer entities` permission.
 the session cookie needs the `X-CSRF-Token` header from `/session/token`. A
 PUT from a browser on another origin also needs `PUT` in the CORS
 `allowedMethods`.
+
+To let a frontend register its own targets:
+
+1. Give the frontend's user the `register consumer node preview targets`
+   permission. With a Simple OAuth client credentials token, this is the user
+   the token acts for.
+2. As a user with the `administer consumer entities` permission, edit the
+   consumer and set **Owner** to that user.
 
 ## Troubleshooting
 

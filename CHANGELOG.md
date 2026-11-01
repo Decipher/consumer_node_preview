@@ -33,6 +33,9 @@ and this project adheres to
   gets those unsaved values in one request.
 - An endpoint where a frontend reads and replaces its consumer's targets and
   layouts, with the `register consumer node preview targets` permission.
+- An Owner field on the consumer form. The owner may register the
+  consumer's targets over the endpoint. Only consumer administrators can
+  change the owner.
 - Admin theme support. The preview uses the admin theme when "Use the
   administration theme when editing or creating content" is on, and takes the
   theme's own tab styles in Claro, Gin and Olivero.

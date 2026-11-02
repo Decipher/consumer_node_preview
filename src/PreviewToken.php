@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Drupal\consumer_node_preview;
 
-// cspell:ignore cnpt
-
 use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Component\Utility\Crypt;
 use Drupal\Core\PrivateKey;
@@ -20,6 +18,8 @@ use Drupal\Core\Site\Settings;
  * user may read which preview, until when. It carries no session and grants
  * nothing by itself. A site's authentication provider decides where to accept
  * it, and should accept it only on the preview route for its node.
+ *
+ * cspell:ignore cnpt
  */
 class PreviewToken {
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\consumer_node_preview\Plugin\Validation\Constraint;
 
+use Drupal\Core\Site\Settings;
 use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\ConstraintValidator;
 
@@ -32,7 +33,40 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator {
     $scheme = strtolower($parts['scheme'] ?? '');
     if (empty($parts['host']) || !in_array($scheme, ['http', 'https'], TRUE)) {
       $this->context->addViolation($constraint->message, ['%url' => $value]);
+      return;
     }
+    if (!$this->hostAllowed(strtolower($parts['host']))) {
+      $this->context->addViolation($constraint->hostMessage, ['%host' => $parts['host']]);
+    }
+  }
+
+  /**
+   * Whether the site's allowed_target_hosts setting admits a host.
+   *
+   * Without the setting, any host is allowed. A pattern's "*." matches one or
+   * more subdomains, and not the bare domain.
+   *
+   * @param string $host
+   *   The URL's host, in lower case.
+   *
+   * @return bool
+   *   TRUE when the host may be saved.
+   */
+  protected function hostAllowed(string $host): bool {
+    $allowed = Settings::get('consumer_node_preview', [])['allowed_target_hosts'] ?? NULL;
+    if (!is_array($allowed)) {
+      return TRUE;
+    }
+    foreach ($allowed as $pattern) {
+      $pattern = strtolower((string) $pattern);
+      if ($host === $pattern) {
+        return TRUE;
+      }
+      if (str_starts_with($pattern, '*.') && str_ends_with($host, substr($pattern, 1)) && strlen($host) > strlen($pattern) - 1) {
+        return TRUE;
+      }
+    }
+    return FALSE;
   }
 
 }

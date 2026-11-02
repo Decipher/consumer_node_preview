@@ -50,6 +50,7 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     protected ResourceTypeRepositoryInterface $resourceTypeRepository,
     protected EntityFieldManagerInterface $entityFieldManager,
     protected TimeInterface $time,
+    protected PreviewToken $previewToken,
   ) {}
 
   /**
@@ -274,6 +275,11 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
       '[view_mode]' => rawurlencode($view_mode_id),
       '[layout]' => rawurlencode($layout),
     ];
+    // Only a URL that asks for one gets a token, so a frontend that reads the
+    // preview with the editor's session never holds one.
+    if (str_contains($url, '[preview_token]')) {
+      $replacements['[preview_token]'] = $this->previewToken->create((string) $node_preview->uuid());
+    }
     // Without an endpoint, the endpoint tokens stay as they are. A visible
     // token is easier to debug than an empty fragment.
     $endpoint = $this->getEndpoint($node_preview);

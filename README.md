@@ -95,6 +95,16 @@ $settings['consumer_node_preview'] = [
 ];
 ```
 
+To limit the hosts a target can use, including targets registered over the API,
+list them. A `*.` pattern matches any subdomain:
+
+```php
+$settings['consumer_node_preview']['allowed_target_hosts'] = [
+  'www.example.com',
+  '*.preview.example.com',
+];
+```
+
 ## Target URLs
 
 A target URL can use these tokens:
@@ -106,6 +116,7 @@ A target URL can use these tokens:
 | `[uuid]` | The node's UUID |
 | `[view_mode]` | The view mode being previewed |
 | `[layout]` | The layout picked, or nothing |
+| `[preview_token]` | A signed token for the editor and this node, for a frontend on another site |
 
 Put the document URL in the fragment, so it stays out of the frontend's server
 logs:
@@ -122,6 +133,34 @@ const url = decodeURIComponent(location.hash.slice(1))
   .replace(/^(https?):\/(?!\/)/, '$1://')
 const response = await fetch(url, { credentials: 'include' })
 ```
+
+### Previewing on another site
+
+A frontend on another site never gets the editor's session cookie. Put the
+token after the document URL in the fragment:
+
+```text
+https://preview.example.com/node/preview?vm=[view_mode]#[jsonapi_node_preview];token=[preview_token]
+```
+
+Split it off before you fetch, and send it as a bearer token without
+credentials. The token then never leaves the browser in a URL:
+
+```js
+const [url, token] = decodeURIComponent(location.hash.slice(1)).split(';token=')
+const response = await fetch(url, {
+  headers: { Authorization: `Bearer ${token}` },
+  credentials: 'omit',
+})
+```
+
+The module creates the token but doesn't accept it. Your site needs an
+authentication provider that reads it with the
+`consumer_node_preview.preview_token` service. Accept it only on the preview
+route of the node it names, and only for an active user, and keep those
+requests out of the page cache. A token lasts 15 minutes. Set
+`$settings['consumer_node_preview']['token_lifetime']`, in seconds, to change
+that.
 
 ## Troubleshooting
 

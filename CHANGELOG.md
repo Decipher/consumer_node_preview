@@ -10,6 +10,9 @@ and this project adheres to
 
 ### Added
 
+- A `[preview_token]` URL token: a short-lived signed token that lets a frontend
+  on another site read one node preview as its editor, once the site accepts it.
+- An `allowed_target_hosts` setting that limits the hosts a preview target can use.
 - Preview targets on consumers: a label and a URL for each frontend that
   renders the consumer's node previews, edited on the consumer form.
 - Preview layouts on consumers: the layouts a frontend can render a preview

@@ -90,8 +90,9 @@ interface PreviewTargetsProviderInterface {
    * The site's targets come first, in a "Site settings" group. Each consumer
    * follows by label, with its targets in field order. The inactive targets
    * come last, in an "Inactive targets" group. The shape suits the #options of
-   * a Form API select, which renders a nested array as an optgroup. Consumers with one label share a group. Options that read the
-   * same in a group add their host.
+   * a Form API select, which renders a nested array as an optgroup. Consumers
+   * with one label share a group. Options that read the same in a group add
+   * their host.
    *
    * @param array<string, array{url: string, group: string, option_label: string}>|null $targets
    *   (optional) The targets from getAllTargets(), when the caller has them

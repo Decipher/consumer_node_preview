@@ -133,7 +133,7 @@ class PreviewTargetsFieldTest extends KernelTestBase {
     ]);
 
     $this->assertSame([
-      'Site' => ['settings:local' => 'Local'],
+      'Site settings' => ['settings:local' => 'Local'],
       'Alpha' => [$alpha->id() . ':0' => 'Local'],
       'Beta' => [$beta->id() . ':0' => 'Staging', $beta->id() . ':1' => 'Live'],
     ], $this->provider->getGroupedTargetOptions());
@@ -147,7 +147,7 @@ class PreviewTargetsFieldTest extends KernelTestBase {
     ], $this->provider->getTargetOptions());
 
     $targets = $this->provider->getAllTargets();
-    $this->assertSame('Site', $targets['settings:local']['group']);
+    $this->assertSame('Site settings', $targets['settings:local']['group']);
     $this->assertSame('Local', $targets['settings:local']['option_label']);
     $this->assertSame('Beta', $targets[$beta->id() . ':1']['group']);
     $this->assertSame('Live', $targets[$beta->id() . ':1']['option_label']);
@@ -168,40 +168,56 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   }
 
   /**
-   * Tests group labels that more than one group uses.
+   * Tests that consumers with one label share a group.
    *
-   * Consumers with one label share a group. A consumer labelled "Site" stays
-   * apart from the site's targets, and says that it is a consumer.
+   * Options that read the same add their host, and their port if they have
+   * one. An option with a different label does not change.
    */
-  public function testSharedGroupLabels(): void {
+  public function testConsumersWithOneLabelShareGroup(): void {
+    $first = $this->createConsumer('Nuxt', [
+      ['label' => 'Live', 'url' => 'https://a.example.com/p'],
+      ['label' => 'Other', 'url' => 'https://a.example.com/o'],
+    ]);
+    $second = $this->createConsumer('Nuxt', [
+      ['label' => 'Live', 'url' => 'http://localhost:3001/p?vm=[view_mode]#[jsonapi_node_preview]'],
+    ]);
+
+    $this->assertSame([
+      'Nuxt' => [
+        $first->id() . ':0' => 'Live (a.example.com)',
+        $first->id() . ':1' => 'Other',
+        $second->id() . ':0' => 'Live (localhost:3001)',
+      ],
+    ], $this->provider->getGroupedTargetOptions());
+  }
+
+  /**
+   * Tests that a site target's path gives no host to add.
+   */
+  public function testOptionsWithoutHostKeepTheirLabel(): void {
+    $this->setSetting('consumer_node_preview', [
+      'targets' => [
+        'one' => ['label' => 'Same', 'url' => '/one'],
+        'two' => ['label' => 'Same', 'url' => '/two'],
+      ],
+    ]);
+    $this->assertSame([
+      'Site settings' => ['settings:one' => 'Same', 'settings:two' => 'Same'],
+    ], $this->provider->getGroupedTargetOptions());
+  }
+
+  /**
+   * Tests that a consumer labelled "Site" is an ordinary group.
+   */
+  public function testConsumerLabelledSiteIsOrdinary(): void {
     $this->setSetting('consumer_node_preview', [
       'targets' => ['local' => ['label' => 'Local', 'url' => '/p']],
     ]);
     $site = $this->createConsumer('Site', [
       ['label' => 'Live', 'url' => 'https://site.example.com/p'],
     ]);
-    $first = $this->createConsumer('Nuxt', [
-      ['label' => 'One', 'url' => 'http://localhost:3000/p'],
-    ]);
-    $second = $this->createConsumer('Nuxt', [
-      ['label' => 'Two', 'url' => 'http://localhost:3001/p'],
-    ]);
-
     $this->assertSame([
-      'Site' => ['settings:local' => 'Local'],
-      'Nuxt' => [$first->id() . ':0' => 'One', $second->id() . ':0' => 'Two'],
-      'Site (consumer)' => [$site->id() . ':0' => 'Live'],
-    ], $this->provider->getGroupedTargetOptions());
-  }
-
-  /**
-   * Tests that a consumer labelled "Site" keeps its label without site targets.
-   */
-  public function testConsumerLabelledSiteWithoutSiteTargets(): void {
-    $site = $this->createConsumer('Site', [
-      ['label' => 'Live', 'url' => 'https://site.example.com/p'],
-    ]);
-    $this->assertSame([
+      'Site settings' => ['settings:local' => 'Local'],
       'Site' => [$site->id() . ':0' => 'Live'],
     ], $this->provider->getGroupedTargetOptions());
   }

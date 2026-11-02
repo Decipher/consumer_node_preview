@@ -23,7 +23,7 @@ and this project adheres to
   preview in a new tab. The screen remembers the editor's last tab, width,
   frontend and each frontend's layout.
 - The Frontend picker groups targets by consumer. Each consumer gets a group
-  with its label, and the settings.php targets come first in a Site group.
+  with its label, and the settings.php targets come first in a Site settings group.
   The target keys do not change.
 - Core's View mode select in the tab row. Changing the view mode reloads only
   the frame, and the Drupal tab follows over AJAX.
@@ -40,7 +40,7 @@ and this project adheres to
   target with the same label, or adds it, and records when it was seen. The
   other targets do not change.
 - Expiry for registered targets. A target that its frontend has not
-  registered for a day moves to an Inactive group in the Frontend picker,
+  registered for a day moves to an Inactive targets group in the Frontend picker,
   where it can still be picked. Cron deletes it after 30 days. The
   `inactive_after` and `delete_after` settings change the two limits. Targets
   added by hand never expire.

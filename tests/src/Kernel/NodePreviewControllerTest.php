@@ -294,7 +294,7 @@ class NodePreviewControllerTest extends KernelTestBase {
     $this->assertStringNotContainsString('value="settings:one" selected', $html);
     // One group still shows its label, so the editor sees where a target is
     // set up.
-    $this->assertSame(1, substr_count($html, '<optgroup label="Site">'));
+    $this->assertSame(1, substr_count($html, '<optgroup label="Site settings">'));
   }
 
   /**
@@ -318,7 +318,7 @@ class NodePreviewControllerTest extends KernelTestBase {
     $html = $this->html($node);
     // The picker groups the targets: the site's first, then each consumer's.
     // An option shows the target's own label, as its group names the consumer.
-    $this->assertMatchesRegularExpression('#<optgroup label="Site">\s*<option value="settings:local">Local</option>\s*</optgroup>\s*<optgroup label="Nuxt">\s*<option value="' . $consumer->id() . ':0" selected="selected">Staging</option>\s*</optgroup>#', $html);
+    $this->assertMatchesRegularExpression('#<optgroup label="Site settings">\s*<option value="settings:local">Local</option>\s*</optgroup>\s*<optgroup label="Nuxt">\s*<option value="' . $consumer->id() . ':0" selected="selected">Staging</option>\s*</optgroup>#', $html);
     $this->assertStringNotContainsString('>Nuxt: Staging<', $html);
     // Outside the picker, a target's label still names its consumer.
     $settings = $this->preview($node)['#attached']['drupalSettings']['consumerNodePreview'];

@@ -60,17 +60,16 @@ interface PreviewTargetsProviderInterface {
    * The inactive targets come last. An inactive target is a registered one
    * whose last registration is older than getInactiveAfter().
    *
-   * @return array<string, array{label: string, url: string, layouts: list<string>, group: string, group_id: string, option_label: string, last_seen: int|null, inactive: bool}>
+   * @return array<string, array{label: string, url: string, layouts: list<string>, group: string, option_label: string, last_seen: int|null, inactive: bool}>
    *   The targets, keyed "settings:<name>" or "<consumer id>:<delta>". A
    *   consumer target's label starts with the consumer's label, and its
    *   layouts are the consumer's. A site target lists its own layouts. The
-   *   group is the consumer's label, "Site" for a site target, or
-   *   "Inactive". The group ID is the consumer's ID, "settings" or
-   *   "inactive". The option label is the target's own label, for use inside
-   *   its group. In the Inactive group, it is the label with the consumer's.
-   *   The last_seen value is the time of the last registration, or NULL for
+   *   group is the consumer's label, "Site settings" for a site target, or
+   *   "Inactive targets". The option label is the target's own label, for use
+   *   inside its group. In the inactive group, it is the label with the
+   *   consumer's. The last_seen value is the time of the last registration, or NULL for
    *   a target added by hand. The inactive value is TRUE for a target in the
-   *   Inactive group.
+   *   inactive group.
    */
   public function getAllTargets(): array;
 
@@ -88,14 +87,14 @@ interface PreviewTargetsProviderInterface {
   /**
    * Returns select options for every target, grouped by consumer.
    *
-   * The site's targets come first, in a "Site" group. Each consumer follows
-   * by label, with its targets in field order. The inactive targets come
-   * last, in an "Inactive" group. The shape suits the
+   * The site's targets come first, in a "Site settings" group. Each consumer
+   * follows by label, with its targets in field order. The inactive targets come
+   * last, in an "Inactive targets" group. The shape suits the
    * #options of a Form API select, which renders a nested array as an
-   * optgroup. Consumers with one label share a group. A consumer with the
-   * label of the "Site" or "Inactive" group adds "(consumer)" to its label.
+   * optgroup. Consumers with one label share a group. Options that read the
+   * same in a group add their host.
    *
-   * @param array<string, array{group: string, group_id: string, option_label: string}>|null $targets
+   * @param array<string, array{url: string, group: string, option_label: string}>|null $targets
    *   (optional) The targets from getAllTargets(), when the caller has them
    *   already. Else they are loaded again.
    *

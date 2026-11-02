@@ -82,13 +82,12 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
    */
   public function getAllTargets(): array {
     $targets = [];
-    // The site's own targets share one group. "Site" matches the name
-    // the README gives them: site targets.
-    $site = (string) new TranslatableMarkup('Site');
+    // The site's own targets share one group. This label and the inactive
+    // one are not likely labels for a consumer.
+    $site = (string) new TranslatableMarkup('Site settings');
     foreach ($this->getSiteTargets() as $name => $target) {
       $targets['settings:' . $name] = $target + [
         'group' => $site,
-        'group_id' => 'settings',
         'option_label' => $target['label'],
         'last_seen' => NULL,
         'inactive' => FALSE,
@@ -97,7 +96,7 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     // An inactive target goes in a group at the end. Its option names the
     // consumer, because the group does not.
     $inactive = [];
-    $inactive_group = (string) new TranslatableMarkup('Inactive');
+    $inactive_group = (string) new TranslatableMarkup('Inactive targets');
     $inactive_before = $this->time->getRequestTime() - $this->getInactiveAfter();
     $storage = $this->entityTypeManager->getStorage('consumer');
     $ids = $storage->getQuery()
@@ -117,7 +116,6 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
           'url' => (string) $item->get('url')->getValue(),
           'layouts' => $layouts,
           'group' => (string) $consumer->label(),
-          'group_id' => (string) $consumer->id(),
           'option_label' => $label,
           'last_seen' => $last_seen,
           'inactive' => FALSE,
@@ -125,7 +123,6 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
         if ($last_seen !== NULL && $last_seen < $inactive_before) {
           $inactive[$consumer->id() . ':' . $delta] = [
             'group' => $inactive_group,
-            'group_id' => 'inactive',
             'option_label' => $target['label'],
             'inactive' => TRUE,
           ] + $target;
@@ -150,22 +147,23 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
    */
   public function getGroupedTargetOptions(?array $targets = NULL): array {
     $targets ??= $this->getAllTargets();
-    // The labels of the groups that are not a consumer's: Site and Inactive.
-    $reserved = [];
+    $counts = [];
     foreach ($targets as $target) {
-      if (!ctype_digit($target['group_id'])) {
-        $reserved[$target['group']] = TRUE;
-      }
+      $counts[$target['group']][$target['option_label']] = ($counts[$target['group']][$target['option_label']] ?? 0) + 1;
     }
     $options = [];
     foreach ($targets as $key => $target) {
-      $group = $target['group'];
-      // A consumer stays apart from a group with a reserved label. Consumers
-      // with one label share a group.
-      if (ctype_digit($target['group_id']) && isset($reserved[$group])) {
-        $group = (string) new TranslatableMarkup('@label (consumer)', ['@label' => $group]);
+      $label = $target['option_label'];
+      // Options that read the same in a group add their host. A path has none.
+      $host = parse_url($target['url'], PHP_URL_HOST);
+      if ($counts[$target['group']][$label] > 1 && $host) {
+        $port = parse_url($target['url'], PHP_URL_PORT);
+        $label = (string) new TranslatableMarkup('@label (@host)', [
+          '@label' => $label,
+          '@host' => $host . ($port ? ':' . $port : ''),
+        ]);
       }
-      $options[$group][(string) $key] = $target['option_label'];
+      $options[$target['group']][(string) $key] = $label;
     }
     return $options;
   }

@@ -426,7 +426,7 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
       ['label' => 'Local', 'url' => 'http://localhost:3000/p', 'last_seen' => $now - 2 * 86400],
     ]);
     $key = $this->consumer->id() . ':0';
-    $this->assertSame(['Inactive' => [$key => 'App: Local']], $provider->getGroupedTargetOptions());
+    $this->assertSame(['Inactive targets' => [$key => 'App: Local']], $provider->getGroupedTargetOptions());
 
     $this->setCurrentUser($this->owner);
     $this->assertSame(200, $this->call('PATCH', [

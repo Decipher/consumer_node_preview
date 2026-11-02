@@ -79,8 +79,8 @@ Each group has the consumer's label, and the groups are in label order. In a
 group, each target shows its own label, in the order the consumer lists them.
 A group shows its label even when it is the only one, so the editor can see
 which consumer the framed target belongs to. Consumers with the same label share
-a group. A consumer labelled "Site" or "Inactive" shows as "Site (consumer)" or
-"Inactive (consumer)" when that group is also in the picker.
+a group. Options that read the same in a group add their host, such as
+"Live (www.example.com)".
 
 A target that its frontend registers expires when the frontend stops
 registering it. See "Registering targets over the API". A target that you add
@@ -92,11 +92,11 @@ not answer shows "(not responding)" after its label in the Frontend picker.
 You can still pick it, because a frontend that is asleep can wake up when you
 open it. The check runs after the page loads, so it does not delay the
 preview. A target that is a path on Drupal's own site is not checked. A
-target in the Inactive group is not checked either, so the check never wakes a
-frontend that is asleep.
+target in the Inactive targets group is not checked either, so the check never
+wakes a frontend that is asleep.
 
 Targets that differ per environment can live in settings.php. They come
-first in the Frontend picker, in a group labelled **Site**:
+first in the Frontend picker, in a group labelled **Site settings**:
 
 ```php
 $settings['consumer_node_preview'] = [
@@ -212,8 +212,8 @@ GET.
 
 A PATCH records the time it registered the target. A frontend that keeps
 running should send the same PATCH again from time to time, such as every few
-hours. If a day goes by without one, the target moves to an **Inactive**
-group at the bottom of the Frontend picker. Its label there names its
+hours. If a day goes by without one, the target moves to an
+**Inactive targets** group at the bottom of the Frontend picker. Its label there names its
 consumer. You can still pick it, and its key does not change. The next PATCH
 moves it back to its consumer's group. After 30 days without one, cron
 deletes the target.

@@ -152,9 +152,9 @@ class PreviewTargetExpiryTest extends KernelTestBase {
     ]);
 
     $this->assertSame([
-      'Site' => ['settings:site' => 'Site target'],
+      'Site settings' => ['settings:site' => 'Site target'],
       'Alpha' => [$alpha->id() . ':0' => 'Fresh', $alpha->id() . ':2' => 'By hand'],
-      'Inactive' => [$alpha->id() . ':1' => 'Alpha: Stale', $beta->id() . ':0' => 'Beta: Asleep'],
+      'Inactive targets' => [$alpha->id() . ':1' => 'Alpha: Stale', $beta->id() . ':0' => 'Beta: Asleep'],
     ], $this->provider->getGroupedTargetOptions());
 
     // An inactive target still resolves by its key, so it can be picked.
@@ -188,7 +188,7 @@ class PreviewTargetExpiryTest extends KernelTestBase {
     $this->assertSame(['Alpha' => [$alpha->id() . ':0' => 'Recent']], $this->provider->getGroupedTargetOptions());
 
     $this->setSetting('consumer_node_preview', ['inactive_after' => 3599]);
-    $this->assertSame(['Inactive' => [$alpha->id() . ':0' => 'Alpha: Recent']], $this->provider->getGroupedTargetOptions());
+    $this->assertSame(['Inactive targets' => [$alpha->id() . ':0' => 'Alpha: Recent']], $this->provider->getGroupedTargetOptions());
   }
 
   /**
@@ -349,7 +349,7 @@ class PreviewTargetExpiryTest extends KernelTestBase {
   }
 
   /**
-   * Tests that a consumer labelled "Inactive" keeps a group of its own.
+   * Tests that a consumer labelled "Inactive" is an ordinary group.
    */
   public function testConsumerLabelledInactiveStaysApart(): void {
     $inactive = $this->createConsumer('Inactive', [
@@ -360,8 +360,8 @@ class PreviewTargetExpiryTest extends KernelTestBase {
     ]);
 
     $this->assertSame([
-      'Inactive (consumer)' => [$inactive->id() . ':0' => 'Live'],
-      'Inactive' => [$alpha->id() . ':0' => 'Alpha: Stale'],
+      'Inactive' => [$inactive->id() . ':0' => 'Live'],
+      'Inactive targets' => [$alpha->id() . ':0' => 'Alpha: Stale'],
     ], $this->provider->getGroupedTargetOptions());
   }
 

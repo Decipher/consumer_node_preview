@@ -251,7 +251,7 @@ class NodePreviewToolbarTest extends WebDriverTestBase {
     // shows the target's own label, because its group names the consumer.
     $groups = $this->getSession()->evaluateScript("Array.from(document.querySelectorAll('[data-consumer-node-preview-target] optgroup')).map((group) => [group.label, Array.from(group.querySelectorAll('option')).map((option) => option.textContent.trim())])");
     $this->assertSame([
-      ['Site', ['One', 'Two', 'Three']],
+      ['Site settings', ['One', 'Two', 'Three']],
       ['Alpha', ['Local']],
       ['Beta', ['Staging', 'Live']],
     ], $groups);
@@ -298,9 +298,9 @@ class NodePreviewToolbarTest extends WebDriverTestBase {
     $assert = $this->jsAssert();
     $groups = $this->getSession()->evaluateScript("Array.from(document.querySelectorAll('[data-consumer-node-preview-target] optgroup')).map((group) => [group.label, Array.from(group.querySelectorAll('option')).map((option) => [option.value, option.textContent.trim()])])");
     $this->assertSame([
-      ['Site', [['settings:one', 'One'], ['settings:two', 'Two'], ['settings:three', 'Three']]],
+      ['Site settings', [['settings:one', 'One'], ['settings:two', 'Two'], ['settings:three', 'Three']]],
       ['Alpha', [[$alpha->id() . ':1', 'Awake']]],
-      ['Inactive', [[$alpha->id() . ':0', 'Alpha: Asleep']]],
+      ['Inactive targets', [[$alpha->id() . ':0', 'Alpha: Asleep']]],
     ], $groups);
 
     $this->getSession()->executeScript('window.consumerNodePreviewTest = true;');

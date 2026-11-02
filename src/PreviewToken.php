@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Drupal\consumer_node_preview;
 
+// cspell:ignore cnpt
+
 use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Component\Utility\Crypt;
 use Drupal\Core\PrivateKey;

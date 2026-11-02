@@ -251,7 +251,7 @@ class NodePreviewToolbarTest extends WebDriverTestBase {
     // shows the target's own label, because its group names the consumer.
     $groups = $this->getSession()->evaluateScript("Array.from(document.querySelectorAll('[data-consumer-node-preview-target] optgroup')).map((group) => [group.label, Array.from(group.querySelectorAll('option')).map((option) => option.textContent.trim())])");
     $this->assertSame([
-      ['Site', ['One', 'Two', 'Three']],
+      ['Site settings', ['One', 'Two', 'Three']],
       ['Alpha', ['Local']],
       ['Beta', ['Staging', 'Live']],
     ], $groups);
@@ -275,6 +275,43 @@ class NodePreviewToolbarTest extends WebDriverTestBase {
     $this->getSession()->reload();
     $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="/alpha-local?vm=full&layout=bare_page"]'));
     $this->assertSame($alpha->id() . ':0', $assert->elementExists('css', '[data-consumer-node-preview-target]')->getValue());
+  }
+
+  /**
+   * Tests that an expired target shows in the Inactive group.
+   *
+   * It can still be picked, because picking it may wake a sleeping
+   * frontend. Its option names the consumer, as the group does not.
+   */
+  public function testAnExpiredTargetIsInactiveAndCanBePicked(): void {
+    $alpha = Consumer::create([
+      'label' => 'Alpha',
+      'client_id' => 'alpha',
+      'preview_targets' => [
+        ['label' => 'Asleep', 'url' => '/alpha-asleep?vm=[view_mode]', 'last_seen' => time() - 2 * 86400],
+        ['label' => 'Awake', 'url' => '/alpha-awake?vm=[view_mode]', 'last_seen' => time()],
+      ],
+    ]);
+    $alpha->save();
+
+    $this->preview();
+    $assert = $this->jsAssert();
+    $groups = $this->getSession()->evaluateScript("Array.from(document.querySelectorAll('[data-consumer-node-preview-target] optgroup')).map((group) => [group.label, Array.from(group.querySelectorAll('option')).map((option) => [option.value, option.textContent.trim()])])");
+    $this->assertSame([
+      ['Site settings', [['settings:one', 'One'], ['settings:two', 'Two'], ['settings:three', 'Three']]],
+      ['Alpha', [[$alpha->id() . ':1', 'Awake']]],
+      ['Inactive targets', [[$alpha->id() . ':0', 'Alpha: Asleep']]],
+    ], $groups);
+
+    $this->getSession()->executeScript('window.consumerNodePreviewTest = true;');
+    $assert->elementExists('css', '[data-consumer-node-preview-target]')->selectOption($alpha->id() . ':0');
+    $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="/alpha-asleep?vm=full"]'));
+    $this->assertStringContainsString('/alpha-asleep?vm=full', (string) $assert->elementExists('css', '[data-consumer-node-preview-open]')->getAttribute('href'));
+    $this->assertTrue($this->getSession()->evaluateScript('window.consumerNodePreviewTest === true'), 'Picking a target reloaded the page.');
+
+    // The key stays the same, so a link to the target still opens it.
+    $this->drupalGet($this->getSession()->getCurrentUrl(), ['query' => ['frontend' => $alpha->id() . ':0']]);
+    $this->assertNotNull($assert->waitForElement('css', '[data-consumer-node-preview-frame][src*="/alpha-asleep?vm=full"]'));
   }
 
   /**

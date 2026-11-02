@@ -148,17 +148,24 @@
   /**
    * Runs a callback once the page and its frame have loaded.
    *
+   * A frontend that never answers keeps the load event from firing. So the
+   * callback also runs after the time limit of a check.
+   *
    * @param {Function} callback
    *   The callback.
    */
   const whenSettled = (callback) => {
     if (document.readyState === 'complete') {
       setTimeout(callback, 0);
-    } else {
-      window.addEventListener('load', () => setTimeout(callback, 0), {
-        once: true,
-      });
+      return;
     }
+    const run = () => {
+      clearTimeout(timer);
+      window.removeEventListener('load', run);
+      setTimeout(callback, 0);
+    };
+    const timer = setTimeout(run, CHECK_TIMEOUT);
+    window.addEventListener('load', run);
   };
 
   /**

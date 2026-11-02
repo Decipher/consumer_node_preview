@@ -948,6 +948,20 @@ describe('Drupal.behaviors.consumerNodePreview', () => {
       await settle();
       expect(fetch).toHaveBeenCalledTimes(2);
     });
+
+    it('starts without the load event when a frame never finishes', async () => {
+      jest.useFakeTimers();
+      fetch.mockResolvedValue({ type: 'opaque' });
+      jest.spyOn(document, 'readyState', 'get').mockReturnValue('interactive');
+      attach({ targets: REMOTE_TARGETS });
+      await jest.advanceTimersByTimeAsync(2999);
+      expect(fetch).not.toHaveBeenCalled();
+      await jest.advanceTimersByTimeAsync(2);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      window.dispatchEvent(new Event('load'));
+      await jest.advanceTimersByTimeAsync(3000);
+      expect(fetch).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('keeps a click on the new tab link away from core', () => {

@@ -15,7 +15,9 @@ use Drupal\Core\Field\FieldItemList;
  * save, a target keeps the stamp of a stored target with the same label and
  * URL. Each stored stamp goes to one target only. A target with a new label
  * or URL gets no stamp, so it is then a target added by hand. A stamp that
- * the save sets wins.
+ * the save sets wins, and it uses up a stored stamp. When a save has fewer
+ * targets with a label and URL than the stored list, no stamp moves. The save
+ * does not tell which copy went, and a copy added by hand must not expire.
  *
  * @extends \Drupal\Core\Field\FieldItemList<\Drupal\consumer_node_preview\Plugin\Field\FieldType\PreviewTargetItem>
  */
@@ -32,16 +34,28 @@ class PreviewTargetItemList extends FieldItemList {
       return;
     }
 
+    $stored = [];
     $stamps = [];
     foreach ($original->get($name) as $item) {
+      $identity = $this->identity($item);
+      $stored[$identity] = ($stored[$identity] ?? 0) + 1;
+      $stamps[$identity] ??= [];
       $last_seen = $item->get('last_seen')->getValue();
       if ($last_seen !== NULL) {
-        $stamps[$this->identity($item)][] = (int) $last_seen;
+        $stamps[$identity][] = (int) $last_seen;
+      }
+    }
+    $saved = [];
+    foreach ($this->list as $item) {
+      $identity = $this->identity($item);
+      $saved[$identity] = ($saved[$identity] ?? 0) + 1;
+      if ($item->get('last_seen')->getValue() !== NULL && isset($stamps[$identity])) {
+        array_shift($stamps[$identity]);
       }
     }
     foreach ($this->list as $item) {
       $identity = $this->identity($item);
-      if ($item->get('last_seen')->getValue() === NULL && ($stamps[$identity] ?? []) !== []) {
+      if ($item->get('last_seen')->getValue() === NULL && ($stamps[$identity] ?? []) !== [] && $saved[$identity] >= $stored[$identity]) {
         $item->set('last_seen', array_shift($stamps[$identity]));
       }
     }

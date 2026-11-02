@@ -285,4 +285,84 @@ class PreviewTargetExpiryTest extends KernelTestBase {
     $this->assertSame(1_800_000_000, (int) Consumer::load($alpha->id())->get('preview_targets')->get(0)->get('last_seen')->getValue());
   }
 
+  /**
+   * Returns the stored stamps of a consumer's targets, in field order.
+   *
+   * @return list<int|null>
+   *   The stamps.
+   */
+  protected function storedStamps(Consumer $consumer): array {
+    $stamps = [];
+    foreach (Consumer::load($consumer->id())->get('preview_targets') as $item) {
+      $stamp = $item->get('last_seen')->getValue();
+      $stamps[] = $stamp === NULL ? NULL : (int) $stamp;
+    }
+    return $stamps;
+  }
+
+  /**
+   * Tests that cron does not stamp a copy that was added by hand.
+   *
+   * The copy has the same label and URL as the expired target. It must stay
+   * after cron, and it must not expire on a later run.
+   */
+  public function testCronLeavesHandAddedCopyUnstamped(): void {
+    $alpha = $this->createConsumer('Alpha', [
+      ['label' => 'Same', 'url' => 'http://localhost:3000/p', 'last_seen' => 1_000_000_000],
+      ['label' => 'Same', 'url' => 'http://localhost:3000/p'],
+    ]);
+
+    $this->cron();
+    $this->assertSame([NULL], $this->storedStamps($alpha));
+
+    $this->cron();
+    $this->assertSame([NULL], $this->storedStamps($alpha));
+  }
+
+  /**
+   * Tests that a registration does not stamp a copy that was added by hand.
+   *
+   * It does not when the registered URL stays, and it does not when the
+   * registered URL changes.
+   */
+  public function testRegisteringLeavesHandAddedCopyUnstamped(): void {
+    $same = ['label' => 'Same', 'url' => 'http://localhost:3000/p'];
+    $alpha = $this->createConsumer('Alpha', [
+      $same + ['last_seen' => 1_700_000_000],
+      $same,
+    ]);
+    $alpha->set('preview_targets', [
+      $same + ['last_seen' => $this->now],
+      $same,
+    ])->save();
+    $this->assertSame([$this->now, NULL], $this->storedStamps($alpha));
+
+    $beta = $this->createConsumer('Beta', [
+      $same + ['last_seen' => 1_700_000_000],
+      $same,
+    ]);
+    $beta->set('preview_targets', [
+      ['label' => 'Same', 'url' => 'http://localhost:4000/p', 'last_seen' => $this->now],
+      $same,
+    ])->save();
+    $this->assertSame([$this->now, NULL], $this->storedStamps($beta));
+  }
+
+  /**
+   * Tests that a consumer labelled "Inactive" keeps a group of its own.
+   */
+  public function testConsumerLabelledInactiveStaysApart(): void {
+    $inactive = $this->createConsumer('Inactive', [
+      ['label' => 'Live', 'url' => 'https://inactive.example.com/p'],
+    ]);
+    $alpha = $this->createConsumer('Alpha', [
+      ['label' => 'Stale', 'url' => 'http://localhost:3000/p', 'last_seen' => $this->now - 2 * 86400],
+    ]);
+
+    $this->assertSame([
+      'Inactive (' . $inactive->id() . ')' => [$inactive->id() . ':0' => 'Live'],
+      'Inactive' => [$alpha->id() . ':0' => 'Alpha: Stale'],
+    ], $this->provider->getGroupedTargetOptions());
+  }
+
 }

@@ -67,9 +67,9 @@ interface PreviewTargetsProviderInterface {
    *   group is the consumer's label, "Site settings" for a site target, or
    *   "Inactive targets". The option label is the target's own label, for use
    *   inside its group. In the inactive group, it is the label with the
-   *   consumer's. The last_seen value is the time of the last registration, or NULL for
-   *   a target added by hand. The inactive value is TRUE for a target in the
-   *   inactive group.
+   *   consumer's. The last_seen value is the time of the last registration,
+   *   or NULL for a target added by hand. The inactive value is TRUE for a
+   *   target in the inactive group.
    */
   public function getAllTargets(): array;
 
@@ -88,10 +88,9 @@ interface PreviewTargetsProviderInterface {
    * Returns select options for every target, grouped by consumer.
    *
    * The site's targets come first, in a "Site settings" group. Each consumer
-   * follows by label, with its targets in field order. The inactive targets come
-   * last, in an "Inactive targets" group. The shape suits the
-   * #options of a Form API select, which renders a nested array as an
-   * optgroup. Consumers with one label share a group. Options that read the
+   * follows by label, with its targets in field order. The inactive targets
+   * come last, in an "Inactive targets" group. The shape suits the #options of
+   * a Form API select, which renders a nested array as an optgroup. Consumers with one label share a group. Options that read the
    * same in a group add their host.
    *
    * @param array<string, array{url: string, group: string, option_label: string}>|null $targets

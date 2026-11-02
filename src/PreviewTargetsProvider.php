@@ -150,21 +150,20 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
    */
   public function getGroupedTargetOptions(?array $targets = NULL): array {
     $targets ??= $this->getAllTargets();
-    // Find the labels that more than one group uses.
-    $groups = [];
+    // The labels of the groups that are not a consumer's: Site and Inactive.
+    $reserved = [];
     foreach ($targets as $target) {
-      $groups[$target['group']][$target['group_id']] = TRUE;
+      if (!ctype_digit($target['group_id'])) {
+        $reserved[$target['group']] = TRUE;
+      }
     }
     $options = [];
     foreach ($targets as $key => $target) {
       $group = $target['group'];
-      // A consumer group with a shared label adds the consumer ID. Then each
-      // group keeps its own heading.
-      if (count($groups[$group]) > 1 && ctype_digit($target['group_id'])) {
-        $group = (string) new TranslatableMarkup('@label (@id)', [
-          '@label' => $group,
-          '@id' => $target['group_id'],
-        ]);
+      // A consumer stays apart from a group with a reserved label. Consumers
+      // with one label share a group.
+      if (ctype_digit($target['group_id']) && isset($reserved[$group])) {
+        $group = (string) new TranslatableMarkup('@label (consumer)', ['@label' => $group]);
       }
       $options[$group][(string) $key] = $target['option_label'];
     }

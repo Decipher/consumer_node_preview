@@ -168,12 +168,12 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   }
 
   /**
-   * Tests that two groups with one label stay apart.
+   * Tests group labels that more than one group uses.
    *
-   * A consumer labelled "Site", or two consumers with one label, each keep
-   * a group of their own. The group label of such a consumer adds its ID.
+   * Consumers with one label share a group. A consumer labelled "Site" stays
+   * apart from the site's targets, and says that it is a consumer.
    */
-  public function testSharedGroupLabelsStaySeparate(): void {
+  public function testSharedGroupLabels(): void {
     $this->setSetting('consumer_node_preview', [
       'targets' => ['local' => ['label' => 'Local', 'url' => '/p']],
     ]);
@@ -181,21 +181,28 @@ class PreviewTargetsFieldTest extends KernelTestBase {
       ['label' => 'Live', 'url' => 'https://site.example.com/p'],
     ]);
     $first = $this->createConsumer('Nuxt', [
-      ['label' => 'Local', 'url' => 'http://localhost:3000/p'],
+      ['label' => 'One', 'url' => 'http://localhost:3000/p'],
     ]);
     $second = $this->createConsumer('Nuxt', [
-      ['label' => 'Local', 'url' => 'http://localhost:3001/p'],
-    ]);
-    $alpha = $this->createConsumer('Alpha', [
-      ['label' => 'Local', 'url' => 'http://localhost:3002/p'],
+      ['label' => 'Two', 'url' => 'http://localhost:3001/p'],
     ]);
 
     $this->assertSame([
       'Site' => ['settings:local' => 'Local'],
-      'Alpha' => [$alpha->id() . ':0' => 'Local'],
-      'Nuxt (' . $first->id() . ')' => [$first->id() . ':0' => 'Local'],
-      'Nuxt (' . $second->id() . ')' => [$second->id() . ':0' => 'Local'],
-      'Site (' . $site->id() . ')' => [$site->id() . ':0' => 'Live'],
+      'Nuxt' => [$first->id() . ':0' => 'One', $second->id() . ':0' => 'Two'],
+      'Site (consumer)' => [$site->id() . ':0' => 'Live'],
+    ], $this->provider->getGroupedTargetOptions());
+  }
+
+  /**
+   * Tests that a consumer labelled "Site" keeps its label without site targets.
+   */
+  public function testConsumerLabelledSiteWithoutSiteTargets(): void {
+    $site = $this->createConsumer('Site', [
+      ['label' => 'Live', 'url' => 'https://site.example.com/p'],
+    ]);
+    $this->assertSame([
+      'Site' => [$site->id() . ':0' => 'Live'],
     ], $this->provider->getGroupedTargetOptions());
   }
 

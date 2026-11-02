@@ -92,9 +92,8 @@ interface PreviewTargetsProviderInterface {
    * by label, with its targets in field order. The inactive targets come
    * last, in an "Inactive" group. The shape suits the
    * #options of a Form API select, which renders a nested array as an
-   * optgroup. Two groups can have the same label, such as two consumers
-   * with one label. Then each consumer group adds the consumer ID to its
-   * label, so each group stays apart.
+   * optgroup. Consumers with one label share a group. A consumer with the
+   * label of the "Site" or "Inactive" group adds "(consumer)" to its label.
    *
    * @param array<string, array{group: string, group_id: string, option_label: string}>|null $targets
    *   (optional) The targets from getAllTargets(), when the caller has them

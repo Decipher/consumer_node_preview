@@ -360,7 +360,7 @@ class PreviewTargetExpiryTest extends KernelTestBase {
     ]);
 
     $this->assertSame([
-      'Inactive (' . $inactive->id() . ')' => [$inactive->id() . ':0' => 'Live'],
+      'Inactive (consumer)' => [$inactive->id() . ':0' => 'Live'],
       'Inactive' => [$alpha->id() . ':0' => 'Alpha: Stale'],
     ], $this->provider->getGroupedTargetOptions());
   }

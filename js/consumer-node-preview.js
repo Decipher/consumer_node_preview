@@ -159,12 +159,14 @@
       setTimeout(callback, 0);
       return;
     }
+    let done = false;
     const run = () => {
-      clearTimeout(timer);
-      window.removeEventListener('load', run);
-      setTimeout(callback, 0);
+      if (!done) {
+        done = true;
+        setTimeout(callback, 0);
+      }
     };
-    const timer = setTimeout(run, CHECK_TIMEOUT);
+    setTimeout(run, CHECK_TIMEOUT);
     window.addEventListener('load', run);
   };
 

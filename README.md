@@ -7,7 +7,7 @@
 Preview unsaved content in your decoupled frontend from Drupal's Preview button.
 Your frontend needs a preview page that fetches the draft. See "Target URLs".
 
-![The preview screen, with the Frontend tab showing an unsaved page.](docs/images/preview-screen.png)
+![The preview screen, with the Frontend tab showing an unsaved page.](https://git.drupalcode.org/project/consumer_node_preview/-/raw/1.0.x/docs/images/preview-screen.png)
 
 For a full description of the module, visit the
 [project page](https://www.drupal.org/project/consumer_node_preview).
@@ -32,7 +32,7 @@ Submit bug reports and feature suggestions, or track changes in the
 - Set frontends per consumer, or per environment in settings.php.
 - Pick the view mode, layout and device width on the preview screen.
 - See which frontends aren't responding.
-- Frontends can [register themselves](docs/api.md), and drop off when they stop.
+- Frontends can [register themselves](https://git.drupalcode.org/project/consumer_node_preview/-/blob/1.0.x/docs/api.md), and drop off when they stop.
 
 ## Requirements
 

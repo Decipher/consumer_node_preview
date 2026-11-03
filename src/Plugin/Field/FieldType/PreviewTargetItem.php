@@ -9,13 +9,17 @@ use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\Core\TypedData\DataDefinition;
 
 /**
- * A preview target: a label and a URL template.
+ * A preview target: a label, a URL template and when it was last seen.
+ *
+ * A frontend that registers its own target stamps last_seen. A target added
+ * by hand has no stamp, and never expires.
  *
  * @FieldType(
  *   id = "consumer_preview_target",
  *   label = @Translation("Preview target"),
  *   description = @Translation("A labelled frontend URL that renders node previews."),
  *   default_widget = "consumer_preview_target_default",
+ *   list_class = "\Drupal\consumer_node_preview\Plugin\Field\FieldType\PreviewTargetItemList",
  *   no_ui = TRUE,
  * )
  */
@@ -44,6 +48,9 @@ class PreviewTargetItem extends FieldItemBase {
       ])
       ->addConstraint('Length', ['max' => 2048])
       ->addConstraint('ConsumerPreviewTargetUrl');
+    $properties['last_seen'] = DataDefinition::create('timestamp')
+      ->setLabel(t('Last seen'))
+      ->setDescription(t('When the frontend last registered the target, or empty for a target added by hand.'));
     return $properties;
   }
 
@@ -60,6 +67,9 @@ class PreviewTargetItem extends FieldItemBase {
         'url' => [
           'type' => 'varchar',
           'length' => 2048,
+        ],
+        'last_seen' => [
+          'type' => 'int',
         ],
       ],
     ];

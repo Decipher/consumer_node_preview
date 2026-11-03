@@ -51,6 +51,16 @@ function consumer_node_preview_entity_base_field_info(EntityTypeInterface $entit
 }
 
 /**
+ * Implements hook_cron().
+ *
+ * Deletes the registered targets that no frontend has refreshed in the
+ * grace period. Targets added by hand stay.
+ */
+function consumer_node_preview_cron(): void {
+  \Drupal::service('consumer_node_preview.targets_provider')->deleteExpiredTargets();
+}
+
+/**
  * Implements hook_theme().
  */
 function consumer_node_preview_theme(array $existing, string $type, string $theme, string $path): array {

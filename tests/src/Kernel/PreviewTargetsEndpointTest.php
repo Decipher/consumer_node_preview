@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\consumer_node_preview\Kernel;
 
+use Drupal\Component\Datetime\TimeInterface;
 use Drupal\consumers\Entity\Consumer;
 use Drupal\Core\Access\CsrfRequestHeaderAccessCheck;
 use Drupal\KernelTests\KernelTestBase;
@@ -125,13 +126,24 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
    *   Extra request headers.
    * @param bool $session
    *   TRUE to send a session cookie, as a browser does after sign-in.
+   * @param int|null $time
+   *   The request time for the datetime.time service to report, or NULL to
+   *   leave the service as it is.
    */
-  protected function call(string $method, ?array $payload = NULL, ?string $consumer_uuid = NULL, array $headers = [], bool $session = FALSE): Response {
+  protected function call(string $method, ?array $payload = NULL, ?string $consumer_uuid = NULL, array $headers = [], bool $session = FALSE, ?int $time = NULL): Response {
     $uri = '/api/consumer-node-preview/targets';
     if ($consumer_uuid !== NULL) {
       $uri .= '?consumer=' . $consumer_uuid;
     }
     $server = ['CONTENT_TYPE' => 'application/json'];
+    if ($time !== NULL) {
+      // As core's CronQueueTest does. The kernel test's time service does not
+      // read the time from the request on every core version.
+      $clock = $this->createStub(TimeInterface::class);
+      $clock->method('getRequestTime')->willReturn($time);
+      $clock->method('getCurrentTime')->willReturn($time);
+      $this->container->set('datetime.time', $clock);
+    }
     foreach ($headers as $name => $value) {
       $server['HTTP_' . strtoupper(str_replace('-', '_', $name))] = $value;
     }
@@ -306,6 +318,246 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
     $reloaded = $storage->load($this->consumer->id());
     assert($reloaded instanceof Consumer);
     return $provider->getTargets($reloaded);
+  }
+
+  /**
+   * Returns the stored stamps of the test consumer, freshly loaded.
+   *
+   * @return array<string, int|null>
+   *   The last_seen value of each target, keyed by label, in field order.
+   */
+  protected function storedStamps(): array {
+    $storage = $this->container->get('entity_type.manager')->getStorage('consumer');
+    $storage->resetCache([$this->consumer->id()]);
+    $reloaded = $storage->load($this->consumer->id());
+    assert($reloaded instanceof Consumer);
+    $stamps = [];
+    foreach ($reloaded->get('preview_targets') as $item) {
+      $last_seen = $item->get('last_seen')->getValue();
+      $stamps[(string) $item->get('label')->getValue()] = $last_seen === NULL ? NULL : (int) $last_seen;
+    }
+    return $stamps;
+  }
+
+  /**
+   * Gives the test consumer these targets, saved.
+   *
+   * @param list<array{label: string, url: string, last_seen?: int}> $targets
+   *   The targets.
+   */
+  protected function giveTargets(array $targets): void {
+    $this->consumer->set('preview_targets', $targets)->save();
+  }
+
+  /**
+   * Tests that a PATCH replaces the target with the same label, in place.
+   *
+   * It stamps that target with the request time. The other targets keep
+   * their place, their values and their stamps.
+   */
+  public function testRegisterReplacesTheTargetWithItsLabel(): void {
+    $this->giveTargets([
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p'],
+      ['label' => 'Staging', 'url' => 'https://stage.example.com/p', 'last_seen' => 1_700_000_000],
+    ]);
+    $this->setCurrentUser($this->owner);
+
+    $response = $this->call('PATCH', [
+      'target' => ['label' => 'Local', 'url' => ' http://localhost:4000/p '],
+    ], $this->consumer->uuid(), time: 1_800_000_000);
+    $this->assertSame(200, $response->getStatusCode());
+    $data = json_decode((string) $response->getContent(), TRUE);
+    $this->assertSame($this->consumer->uuid(), $data['consumer']);
+    $this->assertSame([
+      ['label' => 'Local', 'url' => 'http://localhost:4000/p'],
+      ['label' => 'Staging', 'url' => 'https://stage.example.com/p'],
+    ], $data['targets']);
+    $this->assertSame($data['targets'], $this->storedTargets());
+    $this->assertSame(['Local' => 1_800_000_000, 'Staging' => 1_700_000_000], $this->storedStamps());
+  }
+
+  /**
+   * Tests that a PATCH with a new label adds the target at the end.
+   */
+  public function testRegisterAddsAnUnknownLabelAtTheEnd(): void {
+    $this->setCurrentUser($this->owner);
+
+    $response = $this->call('PATCH', [
+      'target' => ['label' => 'Preview', 'url' => 'https://preview.example.com/p'],
+    ], $this->consumer->uuid(), time: 1_800_000_000);
+    $this->assertSame(200, $response->getStatusCode());
+    $this->assertSame([
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p'],
+      ['label' => 'Preview', 'url' => 'https://preview.example.com/p'],
+    ], $this->storedTargets());
+    // The hand-added target stays unstamped, so it never expires.
+    $this->assertSame(['Local' => NULL, 'Preview' => 1_800_000_000], $this->storedStamps());
+  }
+
+  /**
+   * Tests that a PATCH refreshes only the stamp of the caller's target.
+   *
+   * Another frontend's target keeps its own stamp, so it can still expire.
+   */
+  public function testRegisterStampsOnlyTheCallersTarget(): void {
+    $this->giveTargets([
+      ['label' => 'Alice', 'url' => 'http://localhost:3000/p', 'last_seen' => 1_700_000_000],
+      ['label' => 'Bob', 'url' => 'http://localhost:3001/p', 'last_seen' => 1_700_000_000],
+    ]);
+    $this->setCurrentUser($this->owner);
+
+    $payload = ['target' => ['label' => 'Bob', 'url' => 'http://localhost:3001/p']];
+    $this->assertSame(200, $this->call('PATCH', $payload, $this->consumer->uuid(), time: 1_700_000_500)->getStatusCode());
+    $this->assertSame(['Alice' => 1_700_000_000, 'Bob' => 1_700_000_500], $this->storedStamps());
+
+    // A heartbeat with the same values refreshes the stamp again.
+    $this->assertSame(200, $this->call('PATCH', $payload, $this->consumer->uuid(), time: 1_700_009_000)->getStatusCode());
+    $this->assertSame(['Alice' => 1_700_000_000, 'Bob' => 1_700_009_000], $this->storedStamps());
+  }
+
+  /**
+   * Tests that a PATCH moves an inactive target back to its consumer.
+   */
+  public function testRegisterMovesAnInactiveTargetBack(): void {
+    /** @var \Drupal\consumer_node_preview\PreviewTargetsProviderInterface $provider */
+    $provider = $this->container->get('consumer_node_preview.targets_provider');
+    $now = $this->container->get('datetime.time')->getRequestTime();
+    $this->giveTargets([
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p', 'last_seen' => $now - 2 * 86400],
+    ]);
+    $key = $this->consumer->id() . ':0';
+    $this->assertSame(['Inactive targets' => [$key => 'App: Local']], $provider->getGroupedTargetOptions());
+
+    $this->setCurrentUser($this->owner);
+    $this->assertSame(200, $this->call('PATCH', [
+      'target' => ['label' => 'Local', 'url' => 'http://localhost:3000/p'],
+    ], $this->consumer->uuid(), time: $now)->getStatusCode());
+    $this->container->get('entity_type.manager')->getStorage('consumer')->resetCache();
+    $this->assertSame(['App' => [$key => 'Local']], $provider->getGroupedTargetOptions());
+  }
+
+  /**
+   * Tests that a PATCH can replace the layouts, and keeps them without any.
+   */
+  public function testRegisterLayouts(): void {
+    $this->setCurrentUser($this->owner);
+    $uuid = $this->consumer->uuid();
+    $target = ['label' => 'Local', 'url' => 'http://localhost:3000/p?layout=[layout]'];
+
+    $response = $this->call('PATCH', ['target' => $target, 'layouts' => ['default', 'preview']], $uuid);
+    $this->assertSame(200, $response->getStatusCode());
+    $this->assertSame(['default', 'preview'], json_decode((string) $response->getContent(), TRUE)['layouts']);
+
+    $response = $this->call('PATCH', ['target' => $target], $uuid);
+    $this->assertSame(['default', 'preview'], json_decode((string) $response->getContent(), TRUE)['layouts']);
+
+    $this->assertSame(422, $this->call('PATCH', ['target' => $target, 'layouts' => ['not a name']], $uuid)->getStatusCode());
+    $this->container->get('entity_type.manager')->getStorage('consumer')->resetCache([$this->consumer->id()]);
+    $data = json_decode((string) $this->call('GET', consumer_uuid: $uuid)->getContent(), TRUE);
+    $this->assertSame(['default', 'preview'], $data['layouts']);
+  }
+
+  /**
+   * Tests that an invalid PATCH is rejected and changes nothing.
+   *
+   * The field's constraints check the target, as for a PUT.
+   */
+  public function testRegisterValidation(): void {
+    $this->setCurrentUser($this->owner);
+    $uuid = $this->consumer->uuid();
+
+    $invalid = [
+      // No target, or a whole list instead of one target.
+      ['nope' => TRUE],
+      ['targets' => [['label' => 'Local', 'url' => 'http://localhost:3000/p']]],
+      // A target that is not an object, or has a value that is not a string.
+      ['target' => 'http://localhost:3000/p'],
+      ['target' => ['label' => 'Local', 'url' => ['http://localhost:3000/p']]],
+      ['target' => ['url' => 'http://localhost:3000/p']],
+      // Values the field's constraints refuse.
+      ['target' => ['label' => 'Local', 'url' => 'javascript:alert(1)']],
+      ['target' => ['label' => 'Local', 'url' => '/relative/path']],
+      ['target' => ['label' => '', 'url' => 'https://ok.example.com/p']],
+      ['target' => ['label' => ' ', 'url' => '']],
+    ];
+    // Each request starts from what is stored, as a real request does, not
+    // from what a rejected request left on the cached entity.
+    $storage = $this->container->get('entity_type.manager')->getStorage('consumer');
+    foreach ($invalid as $index => $payload) {
+      $this->assertSame(422, $this->call('PATCH', $payload, $uuid)->getStatusCode(), (string) $index);
+      $storage->resetCache([$this->consumer->id()]);
+    }
+
+    // The message names the field and is plain text.
+    $response = $this->call('PATCH', ['target' => ['label' => 'New', 'url' => 'ftp://example.com/?a=1&b=2']], $uuid);
+    $message = json_decode((string) $response->getContent(), TRUE)['message'];
+    $this->assertStringContainsString('preview_targets.1.url', $message);
+    $this->assertStringContainsString('ftp://example.com/?a=1&b=2', $message);
+
+    $this->assertSame([['label' => 'Local', 'url' => 'http://localhost:3000/p']], $this->storedTargets());
+    $this->assertSame(['Local' => NULL], $this->storedStamps());
+  }
+
+  /**
+   * Tests that a PATCH has the same access rules as a PUT.
+   */
+  public function testRegisterAccess(): void {
+    $payload = ['target' => ['label' => 'Evil', 'url' => 'https://evil.example.com/p']];
+    $uuid = $this->consumer->uuid();
+
+    $this->setUpCurrentUser(['uid' => 0]);
+    $this->assertSame(403, $this->call('PATCH', $payload, $uuid)->getStatusCode());
+    $this->setCurrentUser($this->account());
+    $this->assertSame(403, $this->call('PATCH', $payload, $uuid)->getStatusCode());
+    // The permission without ownership is not enough, even with the header.
+    $this->setCurrentUser($this->account(['register consumer node preview targets']));
+    $this->assertSame(403, $this->call('PATCH', $payload, $uuid)->getStatusCode());
+    $this->assertSame(403, $this->call('PATCH', $payload, headers: ['X-Consumer-ID' => 'app'])->getStatusCode());
+    // A request must name its consumer.
+    $this->setCurrentUser($this->owner);
+    $this->assertSame(404, $this->call('PATCH', $payload)->getStatusCode());
+    // With a session cookie, it needs the CSRF header.
+    $this->assertSame(403, $this->call('PATCH', $payload, $uuid, session: TRUE)->getStatusCode());
+    $this->assertSame([['label' => 'Local', 'url' => 'http://localhost:3000/p']], $this->storedTargets());
+
+    // The owner names the consumer by its client id.
+    $this->assertSame(200, $this->call('PATCH', $payload, headers: ['X-Consumer-ID' => 'app'])->getStatusCode());
+    $token = $this->container->get('csrf_token')->get(CsrfRequestHeaderAccessCheck::TOKEN_KEY);
+    $this->assertSame(200, $this->call('PATCH', $payload, $uuid, ['X-CSRF-Token' => $token], TRUE)->getStatusCode());
+    // An administrator may register on any consumer.
+    $this->setCurrentUser($this->account([
+      'register consumer node preview targets',
+      'administer consumer entities',
+    ]));
+    $this->assertSame(200, $this->call('PATCH', ['target' => ['label' => 'Admin', 'url' => 'https://admin.example.com/p']], $uuid)->getStatusCode());
+    $this->assertSame(['Local', 'Evil', 'Admin'], array_column($this->storedTargets(), 'label'));
+  }
+
+  /**
+   * Tests that a PUT keeps the stamps of unchanged targets, and adds none.
+   *
+   * A hand-managed list then never expires, and one frontend's PUT does not
+   * refresh another frontend's stamp.
+   */
+  public function testPutKeepsStampsOfUnchangedTargets(): void {
+    $this->giveTargets([
+      ['label' => 'Alice', 'url' => 'http://localhost:3000/p', 'last_seen' => 1_700_000_000],
+      ['label' => 'Bob', 'url' => 'http://localhost:3001/p', 'last_seen' => 1_700_000_100],
+      ['label' => 'Carol', 'url' => 'http://localhost:3002/p', 'last_seen' => 1_700_000_200],
+    ]);
+    $this->setCurrentUser($this->owner);
+
+    $this->assertSame(200, $this->call('PUT', [
+      'targets' => [
+        ['label' => 'Dave', 'url' => 'http://localhost:3003/p'],
+        ['label' => 'Bob', 'url' => 'http://localhost:3001/p'],
+        ['label' => 'Alice', 'url' => 'http://localhost:4000/p'],
+      ],
+    ], $this->consumer->uuid(), time: 1_800_000_000)->getStatusCode());
+    // Bob is unchanged, so the target keeps its stamp in its new place. Alice
+    // has a new URL, so that target is now managed by hand. Dave is new, and
+    // Carol went.
+    $this->assertSame(['Dave' => NULL, 'Bob' => 1_700_000_100, 'Alice' => NULL], $this->storedStamps());
   }
 
   /**

@@ -1,7 +1,7 @@
 /**
  * @file
  * Tabs, view mode, frontend targets, layouts, widths and the JSON:API
- * document on the preview.
+ * document on the preview. It also checks which frontends answer.
  */
 
 /**
@@ -63,6 +63,112 @@
       );
     }
   }
+
+  // How long a frontend has to answer the check, in milliseconds.
+  const CHECK_TIMEOUT = 3000;
+
+  /**
+   * Tells whether a frontend's origin answers.
+   *
+   * The request is "no-cors", so any response counts, even an opaque one.
+   * Only a network error or no answer in time counts as silence.
+   *
+   * @param {string} origin
+   *   The origin to ask.
+   *
+   * @return {Promise<boolean>}
+   *   Whether it answered.
+   */
+  async function answers(origin) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT);
+    const answered = await fetch(`${origin}/`, {
+      mode: 'no-cors',
+      cache: 'no-store',
+      credentials: 'omit',
+      signal: controller.signal,
+    }).then(
+      () => true,
+      () => false,
+    );
+    clearTimeout(timer);
+    return answered;
+  }
+
+  /**
+   * Marks the picker's targets whose frontend does not answer.
+   *
+   * Each origin is asked once. A path, or a URL on Drupal's own origin, is
+   * skipped, because the page itself came from there. An inactive target is
+   * skipped too. It has not registered for a while, and the check must not
+   * wake a sleeping frontend. A marked target can still be picked, as picking
+   * it may wake a sleeping frontend.
+   *
+   * @param {HTMLSelectElement} picker
+   *   The Frontend picker.
+   * @param {object} targetSettings
+   *   The targets, keyed by target key, each with a url.
+   */
+  function checkFrontends(picker, targetSettings) {
+    const origins = new Map();
+    Array.from(picker.options).forEach((option) => {
+      const target = targetSettings[option.value];
+      if (!target || target.inactive) {
+        return;
+      }
+      let origin;
+      try {
+        ({ origin } = new URL(target.url, window.location.href));
+      } catch {
+        return;
+      }
+      if (origin === window.location.origin || origin === 'null') {
+        return;
+      }
+      if (!origins.has(origin)) {
+        origins.set(origin, []);
+      }
+      origins.get(origin).push(option);
+    });
+    origins.forEach((options, origin) => {
+      answers(origin).then((answered) => {
+        if (answered) {
+          return;
+        }
+        options.forEach((option) => {
+          option.setAttribute('data-consumer-node-preview-not-responding', '');
+          option.textContent = Drupal.t('@label (not responding)', {
+            '@label': option.textContent,
+          });
+        });
+      });
+    });
+  }
+
+  /**
+   * Runs a callback once the page and its frame have loaded.
+   *
+   * A frontend that never answers keeps the load event from firing. So the
+   * callback also runs after the time limit of a check.
+   *
+   * @param {Function} callback
+   *   The callback.
+   */
+  const whenSettled = (callback) => {
+    if (document.readyState === 'complete') {
+      setTimeout(callback, 0);
+      return;
+    }
+    let done = false;
+    const run = () => {
+      if (!done) {
+        done = true;
+        setTimeout(callback, 0);
+      }
+    };
+    setTimeout(run, CHECK_TIMEOUT);
+    window.addEventListener('load', run);
+  };
 
   /**
    * Sets up one preview page.
@@ -252,6 +358,8 @@
         targets.value = remembered;
         show(remembered);
       }
+      // The check never holds up the framed preview.
+      whenSettled(() => checkFrontends(targets, targetSettings));
     }
     if (layouts) {
       layouts.addEventListener('change', () => {

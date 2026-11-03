@@ -58,6 +58,7 @@ const settings = (targets) => ({
           name,
           label: name.toUpperCase(),
         })),
+        ...(each.inactive ? { inactive: true } : {}),
       },
     ]),
   ),
@@ -780,6 +781,186 @@ describe('Drupal.behaviors.consumerNodePreview', () => {
       window.localStorage.setItem('consumer_node_preview.width', '820px');
       attach();
       expect(width('820px').getAttribute('aria-pressed')).toBe('true');
+    });
+  });
+
+  describe('frontend check', () => {
+    // Frontends on two other origins, a second target on the first origin,
+    // and a path on Drupal's own origin.
+    const REMOTE_TARGETS = [
+      {
+        key: 'settings:one',
+        label: 'One',
+        url: `http://one.example.com/one?mode=${VIEW_MODE}`,
+      },
+      {
+        key: '2:0',
+        label: 'Other',
+        url: `http://one.example.com/other?mode=${VIEW_MODE}`,
+        group: 'Nuxt',
+      },
+      {
+        key: '2:1',
+        label: 'Two',
+        url: `https://two.example.com:8443/two?mode=${VIEW_MODE}`,
+        group: 'Nuxt',
+      },
+      { key: 'settings:path', label: 'Path', url: `/path?mode=${VIEW_MODE}` },
+    ];
+    const option = (value) =>
+      picker().querySelector(`option[value="${value}"]`);
+    const silent = (value) =>
+      option(value).hasAttribute('data-consumer-node-preview-not-responding');
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('asks each other origin once, after the page settles', async () => {
+      fetch.mockResolvedValue({ type: 'opaque', ok: false, status: 0 });
+      attach({ targets: REMOTE_TARGETS });
+      // The frame does not wait for the check.
+      expect(frame().getAttribute('src')).toBe(
+        'http://one.example.com/one?mode=full',
+      );
+      expect(fetch).not.toHaveBeenCalled();
+      await settle();
+      expect(fetch.mock.calls.map(([resource]) => resource)).toEqual([
+        'http://one.example.com/',
+        'https://two.example.com:8443/',
+      ]);
+      expect(fetch).toHaveBeenCalledWith('http://one.example.com/', {
+        mode: 'no-cors',
+        cache: 'no-store',
+        credentials: 'omit',
+        signal: expect.any(AbortSignal),
+      });
+      await settle();
+      // An opaque response is an answer.
+      REMOTE_TARGETS.forEach((each) => {
+        expect(silent(each.key)).toBe(false);
+        expect(option(each.key).textContent).toBe(each.label);
+      });
+    });
+
+    it('does not ask the origin of an inactive target', async () => {
+      fetch.mockRejectedValue(new TypeError('Failed to fetch'));
+      const targets = [
+        ...REMOTE_TARGETS,
+        {
+          key: '3:0',
+          label: 'Asleep',
+          url: `http://asleep.example.com/?mode=${VIEW_MODE}`,
+          group: 'Inactive',
+          inactive: true,
+        },
+      ];
+      attach({ targets });
+      await settle();
+      await settle();
+      expect(fetch.mock.calls.map(([resource]) => resource)).toEqual([
+        'http://one.example.com/',
+        'https://two.example.com:8443/',
+      ]);
+      expect(silent('3:0')).toBe(false);
+      expect(option('3:0').textContent).toBe('Asleep');
+    });
+
+    it('marks the targets of an origin that does not answer', async () => {
+      fetch.mockImplementation((resource) =>
+        resource === 'http://one.example.com/'
+          ? Promise.reject(new TypeError('Failed to fetch'))
+          : Promise.resolve({ type: 'opaque' }),
+      );
+      attach({ targets: REMOTE_TARGETS });
+      await settle();
+      await settle();
+      expect(silent('settings:one')).toBe(true);
+      expect(silent('2:0')).toBe(true);
+      expect(option('settings:one').textContent).toBe('One (not responding)');
+      expect(option('2:0').textContent).toBe('Other (not responding)');
+      expect(silent('2:1')).toBe(false);
+      expect(option('2:1').textContent).toBe('Two');
+      // A marked target can still be picked. Picking it may wake it.
+      expect(option('2:0').disabled).toBe(false);
+      expect(option('2:0').hidden).toBe(false);
+      pick('2:0');
+      expect(frame().getAttribute('src')).toBe(
+        'http://one.example.com/other?mode=full',
+      );
+    });
+
+    it('marks an origin that does not answer in time', async () => {
+      jest.useFakeTimers();
+      fetch.mockImplementation(
+        (resource, options) =>
+          new Promise((resolve, reject) => {
+            if (resource === 'http://one.example.com/') {
+              resolve({ type: 'opaque' });
+            }
+            options.signal.addEventListener('abort', () =>
+              reject(new DOMException('Aborted', 'AbortError')),
+            );
+          }),
+      );
+      attach({ targets: REMOTE_TARGETS });
+      await jest.advanceTimersByTimeAsync(2999);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(silent('2:1')).toBe(false);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(silent('2:1')).toBe(true);
+      expect(option('2:1').textContent).toBe('Two (not responding)');
+      expect(silent('settings:one')).toBe(false);
+    });
+
+    it("skips a path, a URL on Drupal's own origin and a broken URL", async () => {
+      fetch.mockResolvedValue({ type: 'opaque' });
+      attach({
+        targets: [
+          REMOTE_TARGETS[3],
+          {
+            key: 'settings:local',
+            label: 'Local',
+            url: `${window.location.origin}/local?mode=${VIEW_MODE}`,
+          },
+          // A URL the browser cannot parse has no origin to ask.
+          { key: 'settings:broken', label: 'Broken', url: 'http://[broken' },
+        ],
+      });
+      await settle();
+      expect(fetch).not.toHaveBeenCalled();
+      expect(silent('settings:path')).toBe(false);
+    });
+
+    it('asks nothing without a picker', async () => {
+      attach({ targets: [REMOTE_TARGETS[0]] });
+      await settle();
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('waits for the page to load', async () => {
+      fetch.mockResolvedValue({ type: 'opaque' });
+      jest.spyOn(document, 'readyState', 'get').mockReturnValue('interactive');
+      attach({ targets: REMOTE_TARGETS });
+      await settle();
+      expect(fetch).not.toHaveBeenCalled();
+      window.dispatchEvent(new Event('load'));
+      await settle();
+      expect(fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('starts without the load event when a frame never finishes', async () => {
+      jest.useFakeTimers();
+      fetch.mockResolvedValue({ type: 'opaque' });
+      jest.spyOn(document, 'readyState', 'get').mockReturnValue('interactive');
+      attach({ targets: REMOTE_TARGETS });
+      await jest.advanceTimersByTimeAsync(2999);
+      expect(fetch).not.toHaveBeenCalled();
+      await jest.advanceTimersByTimeAsync(2);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      window.dispatchEvent(new Event('load'));
+      await jest.advanceTimersByTimeAsync(3000);
+      expect(fetch).toHaveBeenCalledTimes(2);
     });
   });
 

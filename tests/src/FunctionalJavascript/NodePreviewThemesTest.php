@@ -108,6 +108,8 @@ class NodePreviewThemesTest extends WebDriverTestBase {
     $page->pressButton('Preview');
     $this->assertTrue($this->getSession()->wait(10000, "!!document.querySelector('[data-consumer-node-preview][data-once]')"), 'The preview page did not open.');
     $this->assertTrue($this->getSession()->evaluateScript("!!document.querySelector('link[rel=\"stylesheet\"][href*=\"/$theme/\"]')"), "The preview is not in $theme.");
+    // The targets' frontend never answers, and the browser check says so.
+    $this->waitForSilentFrontends();
 
     // The theme styles the tabs: no list bullets, all on one row.
     $tabs = $this->getSession()->evaluateScript(<<<'JS'

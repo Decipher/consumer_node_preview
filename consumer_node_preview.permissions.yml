@@ -1,4 +1,4 @@
 register consumer node preview targets:
   title: 'Register node preview targets for own consumers'
-  description: 'Read and replace the preview targets and layouts of consumers the user owns. Their targets are framed in the previews of other users.'
+  description: 'Read, replace and register the preview targets and layouts of consumers the user owns. Their targets are framed in the previews of other users.'
   restrict access: true

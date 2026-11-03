@@ -78,11 +78,25 @@ The Frontend picker on the preview screen groups the targets by consumer.
 Each group has the consumer's label, and the groups are in label order. In a
 group, each target shows its own label, in the order the consumer lists them.
 A group shows its label even when it is the only one, so the editor can see
-which consumer the framed target belongs to. When two groups have the same
-label, each consumer group adds the consumer ID, such as "Nuxt (3)".
+which consumer the framed target belongs to. Consumers with the same label share
+a group. Options that read the same in a group add their host, such as
+"Live (www.example.com)".
+
+A target that its frontend registers expires when the frontend stops
+registering it. See "Registering targets over the API". A target that you add
+by hand, on the consumer form or in settings.php, never expires.
+
+When the preview screen opens, the editor's browser asks each frontend's
+origin for a response, with a time limit of 3 seconds. A frontend that does
+not answer shows "(not responding)" after its label in the Frontend picker.
+You can still pick it, because a frontend that is asleep can wake up when you
+open it. The check runs after the page loads, so it does not delay the
+preview. A target that is a path on Drupal's own site is not checked. A
+target in the Inactive targets group is not checked either, so the check never
+wakes a frontend that is asleep.
 
 Targets that differ per environment can live in settings.php. They come
-first in the Frontend picker, in a group labelled **Site**:
+first in the Frontend picker, in a group labelled **Site settings**:
 
 ```php
 $settings['consumer_node_preview'] = [
@@ -96,6 +110,12 @@ $settings['consumer_node_preview'] = [
   ],
   // Optional. Else the first target opens.
   'default' => 'settings:frontend',
+  // Optional. The seconds before a registered target goes inactive. The
+  // default is a day.
+  'inactive_after' => 86400,
+  // Optional. The seconds before cron deletes a registered target. The
+  // default is 30 days.
+  'delete_after' => 2592000,
 ];
 ```
 
@@ -171,12 +191,48 @@ of `consumer`, the `X-Consumer-ID` header or a `consumerId` query parameter can
 name the consumer by its client ID. A request that doesn't name a known
 consumer gets a 404.
 
+A frontend can also register only its own target, with a PATCH:
+
+```text
+PATCH /api/consumer-node-preview/targets?consumer=<uuid>
+Content-Type: application/json
+
+{
+  "target": {"label": "Local", "url": "http://localhost:3000/node/preview?vm=[view_mode]#[jsonapi_node_preview]"},
+  "layouts": ["default", "preview"]
+}
+```
+
+The PATCH replaces the consumer's target with the same label, in its place.
+If there is none, it adds the target at the end. The other targets do not
+change. `layouts` is optional, as for a PUT. The answer is the same as for a
+GET.
+
+### Expiry
+
+A PATCH records the time it registered the target. A frontend that keeps
+running should send the same PATCH again from time to time, such as every few
+hours. If a day goes by without one, the target moves to an
+**Inactive targets** group at the bottom of the Frontend picker. Its label there names its
+consumer. You can still pick it, and its key does not change. The next PATCH
+moves it back to its consumer's group. After 30 days without one, cron
+deletes the target.
+
+Only a PATCH records the time. A target added by hand, on the consumer form
+or in settings.php, has no time, so it never expires. A PUT records no time
+either. A target that a PUT or the consumer form leaves unchanged, with the
+same label and URL, keeps its time. A target with a new label or URL has no
+time, so it is then a target added by hand. To change the two limits, see
+`inactive_after` and `delete_after` in the settings.php example above.
+
+### Access
+
 Access needs the `register consumer node preview targets` permission, and
 ownership of the consumer or the `administer consumer entities` permission.
-`X-Consumer-ID` only selects a consumer. It never grants access. A PUT with
-the session cookie needs the `X-CSRF-Token` header from `/session/token`. A
-PUT from a browser on another origin also needs `PUT` in the CORS
-`allowedMethods`.
+`X-Consumer-ID` only selects a consumer. It never grants access. A PUT or
+PATCH with the session cookie needs the `X-CSRF-Token` header from
+`/session/token`. A PUT or PATCH from a browser on another origin also needs
+that method in the CORS `allowedMethods`.
 
 ## Troubleshooting
 

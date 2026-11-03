@@ -2,7 +2,7 @@ consumer_node_preview.targets:
   path: '/api/consumer-node-preview/targets'
   defaults:
     _controller: '\Drupal\consumer_node_preview\Controller\PreviewTargetsController::handle'
-  methods: [GET, PUT]
+  methods: [GET, PUT, PATCH]
   requirements:
     _permission: 'register consumer node preview targets'
     _csrf_request_header_token: 'TRUE'

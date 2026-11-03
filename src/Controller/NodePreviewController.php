@@ -142,6 +142,8 @@ final class NodePreviewController extends CoreNodePreviewController {
         'label' => $target['label'],
         'url' => $template,
         'layouts' => array_map(fn(string $name): array => ['name' => $name, 'label' => self::layoutLabel($name)], $target['layouts']),
+        // The browser check does not ask an inactive target's frontend.
+        'inactive' => !empty($target['inactive']),
       ];
       $targets[$key] = [
         'label' => $target['label'],

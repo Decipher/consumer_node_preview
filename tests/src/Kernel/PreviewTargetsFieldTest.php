@@ -340,6 +340,7 @@ class PreviewTargetsFieldTest extends KernelTestBase {
     $this->assertSame(2048, $element[0]['url']['#maxlength']);
     foreach (['[jsonapi_node_preview]', '[jsonapi_node_preview_path]', '[uuid]', '[view_mode]', '[layout]', '[preview_token]'] as $token) {
       $this->assertStringContainsString($token, (string) $element[0]['url']['#description']);
+      $this->assertStringContainsString($token, (string) $consumer->get('preview_targets')->getFieldDefinition()->getDescription());
     }
     // The field has unlimited values, so an empty row follows the target.
     $this->assertSame('', $element[1]['label']['#default_value']);

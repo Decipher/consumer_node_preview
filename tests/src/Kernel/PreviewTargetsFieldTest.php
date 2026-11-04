@@ -368,6 +368,21 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   }
 
   /**
+   * Tests that the consumer form groups the preview fields.
+   */
+  public function testConsumerFormGroupsPreviewFields(): void {
+    $consumer = $this->createConsumer('App', []);
+    $form = $this->container->get('entity.form_builder')->getForm($consumer);
+
+    $this->assertSame('details', $form['preview_settings']['#type']);
+    $this->assertSame('Preview settings', (string) $form['preview_settings']['#title']);
+    $this->assertFalse($form['preview_settings']['#open']);
+    foreach (['preview_targets', 'preview_layouts'] as $field) {
+      $this->assertSame('preview_settings', $form[$field]['#group']);
+    }
+  }
+
+  /**
    * Tests that the key of an unpublished consumer's target does not resolve.
    *
    * The picker lists published consumers only, so a key must agree.

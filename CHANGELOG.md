@@ -19,7 +19,8 @@ and this project adheres to
 - Preview targets on consumers: a label and a URL for each frontend that
   renders the consumer's node previews, edited on the consumer form.
 - Preview layouts on consumers: the layouts a frontend can render a preview
-  in, shown in a Layout select on the preview screen.
+  in, shown in a Layout select on the preview screen. Both fields sit in a
+  collapsed Preview settings group on the consumer form.
 - Site targets in settings.php, for URLs that differ per environment, with an
   optional default target.
 - A tabbed preview screen. Core's Preview button opens a Frontend tab that

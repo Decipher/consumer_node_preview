@@ -51,7 +51,7 @@ class SettingsForm extends ConfigFormBase {
     $form['token_lifetime'] = [
       '#type' => 'number',
       '#title' => $this->t('Preview token lifetime'),
-      '#description' => $this->t('The seconds a <code>[preview_token]</code> lasts.'),
+      '#description' => $this->t('The seconds a <code>[preview_token]</code> lasts. The preview page makes its tokens when it opens, so after this an editor reloads the page for new ones.'),
       '#min' => 1,
       '#field_suffix' => $this->t('seconds'),
       '#config_target' => $this->seconds('token_lifetime', PreviewToken::LIFETIME),
@@ -79,6 +79,21 @@ class SettingsForm extends ConfigFormBase {
       '#config_target' => $this->seconds('delete_after', PreviewTargetsProviderInterface::DELETE_AFTER),
     ];
     return parent::buildForm($form, $form_state);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function validateForm(array &$form, FormStateInterface $form_state): void {
+    // A line with a scheme, port or path would never match a target's host.
+    foreach (explode("\n", (string) $form_state->getValue('allowed_target_hosts')) as $line) {
+      $host = strtolower(trim($line));
+      if ($host !== '' && !preg_match('/^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/', $host)) {
+        $form_state->setErrorByName('allowed_target_hosts', $this->t('%line is not a host. Enter a host such as <code>preview.example.com</code>, without a scheme, port or path.', ['%line' => trim($line)]));
+        break;
+      }
+    }
+    parent::validateForm($form, $form_state);
   }
 
   /**

@@ -150,6 +150,20 @@ interface PreviewTargetsProviderInterface {
   public function getAllowedHosts(): array;
 
   /**
+   * Whether the allowed hosts admit a host.
+   *
+   * With no allowed hosts, any host is allowed. A pattern's "*." matches one or
+   * more subdomains, and not the bare domain.
+   *
+   * @param string $host
+   *   The host, in lower case.
+   *
+   * @return bool
+   *   TRUE when a target may use the host.
+   */
+  public function isAllowedHost(string $host): bool;
+
+  /**
    * Deletes the registered targets older than getDeleteAfter().
    *
    * A target added by hand has no stamp, so it is never deleted.

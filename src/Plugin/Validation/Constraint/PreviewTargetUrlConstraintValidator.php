@@ -38,8 +38,10 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
     // The value as stored. A leading space would break the URL in the frame,
     // so it fails here. The form and the endpoint trim before they save.
     $parts = parse_url($value);
-    // parse_url() fails on a badly malformed URL, such as "http:///p".
-    if (!is_array($parts)) {
+    // parse_url() fails on a badly malformed URL, such as "http:///p". It also
+    // reads "https://evil.test\@example.com" as example.com, where a browser
+    // goes to evil.test, so a backslash fails too.
+    if (!is_array($parts) || str_contains($value, '\\')) {
       $this->context->addViolation($constraint->message, ['%url' => $value]);
       return;
     }
@@ -48,37 +50,9 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
       $this->context->addViolation($constraint->message, ['%url' => $value]);
       return;
     }
-    if (!$this->hostAllowed(strtolower($parts['host']))) {
+    if (!$this->targetsProvider->isAllowedHost(strtolower($parts['host']))) {
       $this->context->addViolation($constraint->hostMessage, ['%host' => $parts['host']]);
     }
-  }
-
-  /**
-   * Whether the site's allowed target hosts admit a host.
-   *
-   * With no allowed hosts, any host is allowed. A pattern's "*." matches one or
-   * more subdomains, and not the bare domain.
-   *
-   * @param string $host
-   *   The URL's host, in lower case.
-   *
-   * @return bool
-   *   TRUE when the host may be saved.
-   */
-  protected function hostAllowed(string $host): bool {
-    $allowed = $this->targetsProvider->getAllowedHosts();
-    if (!$allowed) {
-      return TRUE;
-    }
-    foreach ($allowed as $pattern) {
-      if ($host === $pattern) {
-        return TRUE;
-      }
-      if (str_starts_with($pattern, '*.') && str_ends_with($host, substr($pattern, 1)) && strlen($host) > strlen($pattern) - 1) {
-        return TRUE;
-      }
-    }
-    return FALSE;
   }
 
 }

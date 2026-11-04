@@ -140,6 +140,8 @@ class PreviewTokenTest extends KernelTestBase {
       return $violations === 0;
     };
     $this->assertTrue($check('https://anywhere.example/p'), 'Any host is allowed without the setting.');
+    // PHP reads the host after the backslash, and a browser before it.
+    $this->assertFalse($check('https://evil.test\\@example.com/p'), 'A backslash is refused.');
 
     $this->config('consumer_node_preview.settings')
       ->set('allowed_target_hosts', ['example.com', '*.preview.example.com'])
@@ -150,6 +152,7 @@ class PreviewTokenTest extends KernelTestBase {
     $this->assertFalse($check('https://preview.example.com/p'), 'A pattern leaves out the bare domain.');
     $this->assertFalse($check('https://evilpreview.example.com/p'));
     $this->assertFalse($check('https://a.preview.example.com.evil.test/p'));
+    $this->assertFalse($check('https://evil.test\\@example.com/p'));
   }
 
 }

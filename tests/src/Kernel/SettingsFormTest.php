@@ -80,6 +80,27 @@ class SettingsFormTest extends KernelTestBase {
   }
 
   /**
+   * Tests that a line that is not a host is refused, and named in the error.
+   */
+  public function testRefusesLinesThatAreNotHosts(): void {
+    foreach (['https://preview.example.com', 'preview.example.com:3000', 'preview.example.com/p', 'two words'] as $line) {
+      $form_state = (new FormState())->setValues([
+        'allowed_target_hosts' => "localhost\n" . $line,
+        'token_lifetime' => '60',
+        'inactive_after' => '3600',
+        'delete_after' => '7200',
+      ]);
+      $this->container->get('form_builder')->submitForm(SettingsForm::class, $form_state);
+      $errors = $form_state->getErrors();
+      $this->assertArrayHasKey('allowed_target_hosts', $errors, $line);
+      $this->assertStringContainsString($line, (string) $errors['allowed_target_hosts']);
+    }
+    $saved = $this->container->get('config.storage')->read('consumer_node_preview.settings');
+    $this->assertIsArray($saved);
+    $this->assertSame([], $saved['allowed_target_hosts']);
+  }
+
+  /**
    * Tests that a limit below one second is refused.
    */
   public function testRefusesZero(): void {

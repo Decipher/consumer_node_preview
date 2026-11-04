@@ -98,8 +98,11 @@ $settings['consumer_node_preview'] = [
 To limit the hosts a target can use, including targets registered over the
 API, list them under **Allowed target hosts** on the **Preview** tab at
 **Administration > Configuration > Web services > Consumers**. A `*.` pattern
-matches any subdomain, such as `*.preview.example.com`. The tab also sets how
-long a preview token lasts, and when registered targets expire. To pin a value
+matches any subdomain, such as `*.preview.example.com`. A saved target on a
+host you take off the list leaves the Frontend picker. The tab also sets how
+long a preview token lasts, and when registered targets expire. The preview
+page makes its tokens when it opens, so an editor reloads the page once they
+run out. To pin a value
 per environment, override it in settings.php:
 
 ```php

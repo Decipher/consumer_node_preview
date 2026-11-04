@@ -109,10 +109,14 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
       foreach ($consumer->get('preview_targets') as $delta => $item) {
         $last_seen = $item->get('last_seen')->getValue();
         $last_seen = $last_seen === NULL ? NULL : (int) $last_seen;
+        $url = (string) $item->get('url')->getValue();
+        if (!$this->allowsStoredUrl($url)) {
+          continue;
+        }
         $label = (string) $item->get('label')->getValue();
         $target = [
           'label' => $consumer->label() . ': ' . $label,
-          'url' => (string) $item->get('url')->getValue(),
+          'url' => $url,
           'layouts' => $layouts,
           'group' => (string) $consumer->label(),
           'option_label' => $label,
@@ -183,7 +187,10 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
       return NULL;
     }
     $target = $this->getTargets($consumer)[(int) $matches[2]] ?? NULL;
-    return $target === NULL ? NULL : $target + ['layouts' => $this->getLayouts($consumer)];
+    if ($target === NULL || !$this->allowsStoredUrl($target['url'])) {
+      return NULL;
+    }
+    return $target + ['layouts' => $this->getLayouts($consumer)];
   }
 
   /**
@@ -339,6 +346,42 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
       fn(mixed $host): string => strtolower((string) $host),
       $hosts,
     )) : [];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function isAllowedHost(string $host): bool {
+    $allowed = $this->getAllowedHosts();
+    if (!$allowed) {
+      return TRUE;
+    }
+    foreach ($allowed as $pattern) {
+      if ($host === $pattern) {
+        return TRUE;
+      }
+      if (str_starts_with($pattern, '*.') && str_ends_with($host, substr($pattern, 1)) && strlen($host) > strlen($pattern) - 1) {
+        return TRUE;
+      }
+    }
+    return FALSE;
+  }
+
+  /**
+   * Whether a saved target's URL is on a host the site still allows.
+   *
+   * The allowed hosts can change after a target is saved. A target outside
+   * them must not get a preview token.
+   *
+   * @param string $url
+   *   The target's URL template.
+   */
+  protected function allowsStoredUrl(string $url): bool {
+    if (!$this->getAllowedHosts()) {
+      return TRUE;
+    }
+    $host = parse_url($url, PHP_URL_HOST);
+    return is_string($host) && !str_contains($url, '\\') && $this->isAllowedHost(strtolower($host));
   }
 
   /**

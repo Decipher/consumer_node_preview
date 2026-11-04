@@ -401,6 +401,29 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   }
 
   /**
+   * Tests that a saved target leaves the picker when its host is not allowed.
+   *
+   * The allowed hosts can change after a target is saved. The preview must not
+   * send a token to a host the site no longer allows.
+   */
+  public function testStoredTargetOnHostNoLongerAllowed(): void {
+    $consumer = $this->createConsumer('App', [
+      ['label' => 'Old', 'url' => 'https://old.example.com/p'],
+      ['label' => 'Kept', 'url' => 'https://kept.example.com/p'],
+    ]);
+    $old = $consumer->id() . ':0';
+    $kept = $consumer->id() . ':1';
+    $this->assertNotNull($this->provider->getTargetByKey($old));
+
+    $this->config('consumer_node_preview.settings')
+      ->set('allowed_target_hosts', ['kept.example.com'])
+      ->save();
+    $this->assertSame([$kept], array_keys($this->provider->getAllTargets()));
+    $this->assertNull($this->provider->getTargetByKey($old));
+    $this->assertNotNull($this->provider->getTargetByKey($kept));
+  }
+
+  /**
    * Tests that a default naming an unpublished consumer's target falls back.
    *
    * It falls back to the first target in the picker.

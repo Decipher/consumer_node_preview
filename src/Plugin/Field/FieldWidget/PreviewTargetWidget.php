@@ -7,6 +7,7 @@ namespace Drupal\consumer_node_preview\Plugin\Field\FieldWidget;
 use Drupal\Core\Field\FieldItemListInterface;
 use Drupal\Core\Field\WidgetBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Site\Settings;
 use Symfony\Component\Validator\ConstraintViolationInterface;
 
 /**
@@ -43,10 +44,19 @@ class PreviewTargetWidget extends WidgetBase {
       '#default_value' => $items[$delta]->label ?? '',
       '#maxlength' => 255,
     ];
+    $description = $this->t('An absolute http or https URL. It can use the tokens [jsonapi_node_preview], [jsonapi_node_preview_path], [uuid], [view_mode], [layout] and [preview_token].');
+    // Show the site's host allowlist, so the rule is known before a save.
+    $hosts = Settings::get('consumer_node_preview', [])['allowed_target_hosts'] ?? NULL;
+    if (is_array($hosts) && $hosts) {
+      $description = $this->t('@description Allowed hosts: @hosts.', [
+        '@description' => $description,
+        '@hosts' => implode(', ', $hosts),
+      ]);
+    }
     $element['url'] = [
       '#type' => 'textfield',
       '#title' => $this->t('URL template'),
-      '#description' => $this->t('An absolute http or https URL. It can use the tokens [jsonapi_node_preview], [jsonapi_node_preview_path], [uuid], [view_mode] and [layout].'),
+      '#description' => $description,
       '#default_value' => $items[$delta]->url ?? '',
       '#maxlength' => 2048,
     ];

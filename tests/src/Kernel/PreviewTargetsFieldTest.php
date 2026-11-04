@@ -338,12 +338,32 @@ class PreviewTargetsFieldTest extends KernelTestBase {
     $this->assertSame('Local', $element[0]['label']['#default_value']);
     $this->assertSame('http://localhost:3000/p', $element[0]['url']['#default_value']);
     $this->assertSame(2048, $element[0]['url']['#maxlength']);
-    foreach (['[jsonapi_node_preview]', '[jsonapi_node_preview_path]', '[uuid]', '[view_mode]', '[layout]'] as $token) {
+    foreach (['[jsonapi_node_preview]', '[jsonapi_node_preview_path]', '[uuid]', '[view_mode]', '[layout]', '[preview_token]'] as $token) {
       $this->assertStringContainsString($token, (string) $element[0]['url']['#description']);
     }
     // The field has unlimited values, so an empty row follows the target.
     $this->assertSame('', $element[1]['label']['#default_value']);
     $this->assertSame('', $element[1]['url']['#default_value']);
+  }
+
+  /**
+   * Tests that the URL field lists the allowed hosts, when the site has some.
+   */
+  public function testWidgetListsAllowedHosts(): void {
+    $widget = $this->container->get('entity_display.repository')
+      ->getFormDisplay('consumer', 'consumer')
+      ->getRenderer('preview_targets');
+    $consumer = $this->createConsumer('App', []);
+    $description = function () use ($widget, $consumer): string {
+      $form = ['#parents' => []];
+      return (string) $widget->form($consumer->get('preview_targets'), $form, new FormState())['widget'][0]['url']['#description'];
+    };
+    $this->assertStringNotContainsString('Allowed hosts', $description());
+
+    $this->setSetting('consumer_node_preview', [
+      'allowed_target_hosts' => ['www.example.com', '*.preview.example.com'],
+    ]);
+    $this->assertStringContainsString('Allowed hosts: www.example.com, *.preview.example.com.', $description());
   }
 
   /**

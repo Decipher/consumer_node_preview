@@ -428,14 +428,14 @@ class PreviewTargetsFieldTest extends KernelTestBase {
     $tokens->expects($this->once())
       ->method('create')
       ->with($node->uuid())
-      ->willReturn('cnpt.payload.signature');
+      ->willReturn(PreviewToken::PREFIX . 'payload.signature');
     $this->container->set('consumer_node_preview.preview_token', $tokens);
     // Build the provider again, with the token service above.
     $this->container->set('consumer_node_preview.targets_provider', NULL);
     $provider = $this->container->get('consumer_node_preview.targets_provider');
 
     $this->assertSame(
-      'https://preview.example.com/p#t=cnpt.payload.signature',
+      'https://preview.example.com/p#t=' . PreviewToken::PREFIX . 'payload.signature',
       $provider->resolveUrl('https://preview.example.com/p#t=[preview_token]', $node, 'full'),
     );
     // A URL without the token creates none.

@@ -353,6 +353,7 @@ class PreviewTargetsFieldTest extends KernelTestBase {
     $widget = $this->container->get('entity_display.repository')
       ->getFormDisplay('consumer', 'consumer')
       ->getRenderer('preview_targets');
+    $this->assertInstanceOf(PreviewTargetWidget::class, $widget);
     $consumer = $this->createConsumer('App', []);
     $description = function () use ($widget, $consumer): string {
       $form = ['#parents' => []];
@@ -360,9 +361,9 @@ class PreviewTargetsFieldTest extends KernelTestBase {
     };
     $this->assertStringNotContainsString('Allowed hosts', $description());
 
-    $this->setSetting('consumer_node_preview', [
-      'allowed_target_hosts' => ['www.example.com', '*.preview.example.com'],
-    ]);
+    $this->config('consumer_node_preview.settings')
+      ->set('allowed_target_hosts', ['www.example.com', '*.preview.example.com'])
+      ->save();
     $this->assertStringContainsString('Allowed hosts: www.example.com, *.preview.example.com.', $description());
   }
 

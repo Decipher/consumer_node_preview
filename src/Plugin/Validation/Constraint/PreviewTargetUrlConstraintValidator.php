@@ -4,14 +4,27 @@ declare(strict_types=1);
 
 namespace Drupal\consumer_node_preview\Plugin\Validation\Constraint;
 
-use Drupal\Core\Site\Settings;
+use Drupal\consumer_node_preview\PreviewTargetsProviderInterface;
+use Drupal\Core\DependencyInjection\ContainerInjectionInterface;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\ConstraintValidator;
 
 /**
  * Validates the ConsumerPreviewTargetUrl constraint.
  */
-class PreviewTargetUrlConstraintValidator extends ConstraintValidator {
+class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements ContainerInjectionInterface {
+
+  final public function __construct(
+    protected PreviewTargetsProviderInterface $targetsProvider,
+  ) {}
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container): static {
+    return new static($container->get('consumer_node_preview.targets_provider'));
+  }
 
   /**
    * {@inheritdoc}
@@ -41,9 +54,9 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator {
   }
 
   /**
-   * Whether the site's allowed_target_hosts setting admits a host.
+   * Whether the site's allowed target hosts admit a host.
    *
-   * Without the setting, any host is allowed. A pattern's "*." matches one or
+   * With no allowed hosts, any host is allowed. A pattern's "*." matches one or
    * more subdomains, and not the bare domain.
    *
    * @param string $host
@@ -53,12 +66,11 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator {
    *   TRUE when the host may be saved.
    */
   protected function hostAllowed(string $host): bool {
-    $allowed = Settings::get('consumer_node_preview', [])['allowed_target_hosts'] ?? NULL;
-    if (!is_array($allowed)) {
+    $allowed = $this->targetsProvider->getAllowedHosts();
+    if (!$allowed) {
       return TRUE;
     }
     foreach ($allowed as $pattern) {
-      $pattern = strtolower((string) $pattern);
       if ($host === $pattern) {
         return TRUE;
       }

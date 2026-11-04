@@ -47,11 +47,12 @@ After a day without one, the target moves to **Inactive targets** at the bottom
 of the Frontend picker. You can still pick it, and the next `PATCH` moves it
 back. After 30 days, cron deletes it.
 
-Change the limits in settings.php, in seconds:
+Change the limits on the **Preview** tab at **Administration > Configuration >
+Web services > Consumers**, or pin them in settings.php, in seconds:
 
 ```php
-$settings['consumer_node_preview']['inactive_after'] = 86400;
-$settings['consumer_node_preview']['delete_after'] = 2592000;
+$config['consumer_node_preview.settings']['inactive_after'] = 86400;
+$config['consumer_node_preview.settings']['delete_after'] = 2592000;
 ```
 
 Settings targets never expire, and neither do targets added on the consumer

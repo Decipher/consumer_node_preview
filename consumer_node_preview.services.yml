@@ -12,6 +12,7 @@ services:
       - '@entity_field.manager'
       - '@datetime.time'
       - '@consumer_node_preview.preview_token'
+      - '@config.factory'
 
   consumer_node_preview.preview_token:
     class: Drupal\consumer_node_preview\PreviewToken
@@ -19,3 +20,4 @@ services:
       - '@current_user'
       - '@private_key'
       - '@datetime.time'
+      - '@config.factory'

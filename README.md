@@ -95,11 +95,15 @@ $settings['consumer_node_preview'] = [
 ];
 ```
 
-To limit the hosts a target can use, including targets registered over the API,
-list them. A `*.` pattern matches any subdomain:
+To limit the hosts a target can use, including targets registered over the
+API, list them under **Allowed target hosts** on the **Preview** tab at
+**Administration > Configuration > Web services > Consumers**. A `*.` pattern
+matches any subdomain, such as `*.preview.example.com`. The tab also sets how
+long a preview token lasts, and when registered targets expire. To pin a value
+per environment, override it in settings.php:
 
 ```php
-$settings['consumer_node_preview']['allowed_target_hosts'] = [
+$config['consumer_node_preview.settings']['allowed_target_hosts'] = [
   'www.example.com',
   '*.preview.example.com',
 ];
@@ -158,9 +162,8 @@ The module creates the token but doesn't accept it. Your site needs an
 authentication provider that reads it with the
 `consumer_node_preview.preview_token` service. Accept it only on the preview
 route of the node it names, and only for an active user, and keep those
-requests out of the page cache. A token lasts 15 minutes. Set
-`$settings['consumer_node_preview']['token_lifetime']`, in seconds, to change
-that.
+requests out of the page cache. A token lasts 15 minutes, unless you change
+that on the **Preview** tab.
 
 ## Troubleshooting
 

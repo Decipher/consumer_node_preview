@@ -9,7 +9,6 @@ use Drupal\consumer_node_preview\Plugin\Validation\Constraint\PreviewTargetUrlCo
 use Drupal\consumer_node_preview\Plugin\Validation\Constraint\PreviewTargetUrlConstraintValidator;
 use Drupal\consumer_node_preview\PreviewToken;
 use Drupal\Core\Session\AccountInterface;
-use Drupal\Core\Site\Settings;
 use Drupal\KernelTests\KernelTestBase;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -22,7 +21,34 @@ use Symfony\Component\Validator\Context\ExecutionContextInterface;
 #[RunTestsInSeparateProcesses]
 class PreviewTokenTest extends KernelTestBase {
 
+  /**
+   * {@inheritdoc}
+   */
+  protected static $modules = [
+    'system',
+    'user',
+    'field',
+    'file',
+    'image',
+    'filter',
+    'text',
+    'node',
+    'serialization',
+    'jsonapi',
+    'jsonapi_node_preview',
+    'consumers',
+    'consumer_node_preview',
+  ];
+
   private const UUID = '639d65b0-6903-53e7-8b5c-4c1d3b4a1953';
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function setUp(): void {
+    parent::setUp();
+    $this->installConfig(['consumer_node_preview']);
+  }
 
   /**
    * Returns a token service for user 7, at a moment in time.
@@ -32,7 +58,7 @@ class PreviewTokenTest extends KernelTestBase {
     $account->method('id')->willReturn(7);
     $time = $this->createMock(TimeInterface::class);
     $time->method('getCurrentTime')->willReturn($now);
-    return new PreviewToken($account, $this->container->get('private_key'), $time);
+    return new PreviewToken($account, $this->container->get('private_key'), $time, $this->container->get('config.factory'));
   }
 
   /**
@@ -43,6 +69,16 @@ class PreviewTokenTest extends KernelTestBase {
     $this->assertStringStartsWith(PreviewToken::PREFIX, $token);
     $this->assertSame(['uid' => 7, 'uuid' => self::UUID], $this->tokens(1899)->read($token));
     $this->assertNull($this->tokens(1900)->read($token));
+  }
+
+  /**
+   * Tests that the token_lifetime setting changes how long a token lasts.
+   */
+  public function testLifetimeSetting(): void {
+    $this->config('consumer_node_preview.settings')->set('token_lifetime', 60)->save();
+    $token = $this->tokens(1000)->create(self::UUID);
+    $this->assertNotNull($this->tokens(1059)->read($token));
+    $this->assertNull($this->tokens(1060)->read($token));
   }
 
   /**
@@ -78,14 +114,16 @@ class PreviewTokenTest extends KernelTestBase {
       $context->method('addViolation')->willReturnCallback(function () use (&$violations): void {
         $violations++;
       });
-      $validator = new PreviewTargetUrlConstraintValidator();
+      $validator = PreviewTargetUrlConstraintValidator::create($this->container);
       $validator->initialize($context);
       $validator->validate($url, new PreviewTargetUrlConstraint());
       return $violations === 0;
     };
     $this->assertTrue($check('https://anywhere.example/p'), 'Any host is allowed without the setting.');
 
-    new Settings(Settings::getAll() + ['consumer_node_preview' => ['allowed_target_hosts' => ['example.com', '*.preview.example.com']]]);
+    $this->config('consumer_node_preview.settings')
+      ->set('allowed_target_hosts', ['example.com', '*.preview.example.com'])
+      ->save();
     $this->assertTrue($check('https://example.com/p'));
     $this->assertTrue($check('https://a.preview.example.com/p'));
     $this->assertTrue($check('https://a.b.preview.example.com/p'));

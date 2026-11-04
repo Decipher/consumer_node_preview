@@ -6,6 +6,7 @@ namespace Drupal\consumer_node_preview;
 
 use Drupal\Component\Datetime\TimeInterface;
 use Drupal\consumers\Entity\ConsumerInterface;
+use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityFieldManagerInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Site\Settings;
@@ -31,10 +32,6 @@ use Symfony\Component\Routing\Exception\RouteNotFoundException;
  *     ],
  *   ],
  *   'default' => 'settings:frontend',
- *   // Seconds after its last registration that a target goes inactive.
- *   'inactive_after' => 86400,
- *   // Seconds after its last registration that cron deletes a target.
- *   'delete_after' => 2592000,
  * ];
  * @endcode
  */
@@ -51,6 +48,7 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     protected EntityFieldManagerInterface $entityFieldManager,
     protected TimeInterface $time,
     protected PreviewToken $previewToken,
+    protected ConfigFactoryInterface $configFactory,
   ) {}
 
   /**
@@ -333,16 +331,27 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
   }
 
   /**
-   * Returns a number of seconds from settings.php, or its default.
+   * {@inheritdoc}
+   */
+  public function getAllowedHosts(): array {
+    $hosts = $this->configFactory->get('consumer_node_preview.settings')->get('allowed_target_hosts');
+    return is_array($hosts) ? array_values(array_map(
+      fn(mixed $host): string => strtolower((string) $host),
+      $hosts,
+    )) : [];
+  }
+
+  /**
+   * Returns a number of seconds from the module's settings, or its default.
    *
    * @param string $name
-   *   The key in $settings['consumer_node_preview'].
+   *   The key in consumer_node_preview.settings.
    * @param int $default
    *   The value when the setting is missing, or is not a whole number above
    *   zero.
    */
   protected function secondsSetting(string $name, int $default): int {
-    $value = Settings::get('consumer_node_preview', [])[$name] ?? NULL;
+    $value = $this->configFactory->get('consumer_node_preview.settings')->get($name);
     return is_int($value) && $value > 0 ? $value : $default;
   }
 

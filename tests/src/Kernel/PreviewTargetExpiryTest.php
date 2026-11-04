@@ -60,6 +60,7 @@ class PreviewTargetExpiryTest extends KernelTestBase {
     parent::setUp();
     $this->installEntitySchema('user');
     $this->installEntitySchema('consumer');
+    $this->installConfig(['consumer_node_preview']);
     $this->provider = $this->container->get('consumer_node_preview.targets_provider');
     $this->now = (int) $this->container->get('datetime.time')->getRequestTime();
   }
@@ -112,6 +113,17 @@ class PreviewTargetExpiryTest extends KernelTestBase {
   }
 
   /**
+   * Sets the expiry settings.
+   */
+  protected function setExpiry(array $values): void {
+    $config = $this->config('consumer_node_preview.settings');
+    foreach ($values as $name => $value) {
+      $config->set($name, $value);
+    }
+    $config->save();
+  }
+
+  /**
    * Tests the defaults of the two settings, and their overrides.
    *
    * A value that is not a whole number above zero falls back to the default.
@@ -120,15 +132,21 @@ class PreviewTargetExpiryTest extends KernelTestBase {
     $this->assertSame(86400, $this->provider->getInactiveAfter());
     $this->assertSame(2592000, $this->provider->getDeleteAfter());
 
-    $this->setSetting('consumer_node_preview', ['inactive_after' => 3600, 'delete_after' => 7200]);
+    $this->setExpiry(['inactive_after' => 3600, 'delete_after' => 7200]);
     $this->assertSame(3600, $this->provider->getInactiveAfter());
     $this->assertSame(7200, $this->provider->getDeleteAfter());
 
+    // An override in settings.php skips the schema, so it can be any type.
     foreach (['3600', 0, -1, 1.5, NULL] as $invalid) {
-      $this->setSetting('consumer_node_preview', ['inactive_after' => $invalid, 'delete_after' => $invalid]);
+      $GLOBALS['config']['consumer_node_preview.settings'] = [
+        'inactive_after' => $invalid,
+        'delete_after' => $invalid,
+      ];
+      $this->container->get('config.factory')->reset('consumer_node_preview.settings');
       $this->assertSame(86400, $this->provider->getInactiveAfter(), var_export($invalid, TRUE));
       $this->assertSame(2592000, $this->provider->getDeleteAfter(), var_export($invalid, TRUE));
     }
+    unset($GLOBALS['config']['consumer_node_preview.settings']);
   }
 
   /**
@@ -187,7 +205,7 @@ class PreviewTargetExpiryTest extends KernelTestBase {
     ]);
     $this->assertSame(['Alpha' => [$alpha->id() . ':0' => 'Recent']], $this->provider->getGroupedTargetOptions());
 
-    $this->setSetting('consumer_node_preview', ['inactive_after' => 3599]);
+    $this->setExpiry(['inactive_after' => 3599]);
     $this->assertSame(['Inactive targets' => [$alpha->id() . ':0' => 'Alpha: Recent']], $this->provider->getGroupedTargetOptions());
   }
 
@@ -248,7 +266,7 @@ class PreviewTargetExpiryTest extends KernelTestBase {
     $this->cron();
     $this->assertSame(['Recent' => $this->now - 7200], $this->stamps($alpha));
 
-    $this->setSetting('consumer_node_preview', ['delete_after' => 7199]);
+    $this->setExpiry(['delete_after' => 7199]);
     $this->cron();
     $this->assertSame([], $this->stamps($alpha));
   }

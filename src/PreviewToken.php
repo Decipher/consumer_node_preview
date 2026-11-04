@@ -6,6 +6,7 @@ namespace Drupal\consumer_node_preview;
 
 use Drupal\Component\Datetime\TimeInterface;
 use Drupal\Component\Utility\Crypt;
+use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\PrivateKey;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\Core\Site\Settings;
@@ -31,12 +32,13 @@ class PreviewToken {
   /**
    * The default lifetime, in seconds.
    */
-  protected const LIFETIME = 900;
+  public const LIFETIME = 900;
 
   public function __construct(
     protected AccountInterface $currentUser,
     protected PrivateKey $privateKey,
     protected TimeInterface $time,
+    protected ConfigFactoryInterface $configFactory,
   ) {}
 
   /**
@@ -49,8 +51,8 @@ class PreviewToken {
    *   The token.
    */
   public function create(string $uuid): string {
-    $settings = Settings::get('consumer_node_preview', []);
-    $lifetime = (int) ($settings['token_lifetime'] ?? self::LIFETIME);
+    $lifetime = $this->configFactory->get('consumer_node_preview.settings')->get('token_lifetime');
+    $lifetime = is_int($lifetime) && $lifetime > 0 ? $lifetime : self::LIFETIME;
     $payload = rtrim(strtr(base64_encode(json_encode([
       'u' => (int) $this->currentUser->id(),
       'n' => $uuid,
@@ -76,7 +78,7 @@ class PreviewToken {
     if (count($parts) !== 2 || !hash_equals($this->sign($parts[0]), $parts[1])) {
       return NULL;
     }
-    $claims = json_decode((string) base64_decode(strtr($parts[0], '-_', '+/')), TRUE);
+    $claims = json_decode(base64_decode(strtr($parts[0], '-_', '+/')), TRUE);
     if (!is_array($claims) || !isset($claims['u'], $claims['n'], $claims['e'])) {
       return NULL;
     }

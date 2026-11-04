@@ -128,7 +128,7 @@ interface PreviewTargetsProviderInterface {
    * Returns how long a registered target stays active.
    *
    * @return int
-   *   The seconds from "inactive_after" in settings.php, or a day.
+   *   The seconds from the "inactive_after" setting, or a day.
    */
   public function getInactiveAfter(): int;
 
@@ -136,9 +136,18 @@ interface PreviewTargetsProviderInterface {
    * Returns how long cron keeps a registered target.
    *
    * @return int
-   *   The seconds from "delete_after" in settings.php, or 30 days.
+   *   The seconds from the "delete_after" setting, or 30 days.
    */
   public function getDeleteAfter(): int;
+
+  /**
+   * Returns the hosts a preview target may use.
+   *
+   * @return list<string>
+   *   The hosts, in lower case. A "*." pattern matches the subdomains of the
+   *   rest. An empty list allows any host.
+   */
+  public function getAllowedHosts(): array;
 
   /**
    * Deletes the registered targets older than getDeleteAfter().

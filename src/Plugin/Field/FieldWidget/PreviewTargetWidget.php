@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Drupal\consumer_node_preview\Plugin\Field\FieldWidget;
 
+use Drupal\consumer_node_preview\PreviewTargetsProviderInterface;
 use Drupal\Core\Field\FieldItemListInterface;
 use Drupal\Core\Field\WidgetBase;
 use Drupal\Core\Form\FormStateInterface;
-use Drupal\Core\Site\Settings;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\Validator\ConstraintViolationInterface;
 
 /**
@@ -22,6 +23,20 @@ use Symfony\Component\Validator\ConstraintViolationInterface;
  * )
  */
 class PreviewTargetWidget extends WidgetBase {
+
+  /**
+   * The preview targets provider.
+   */
+  protected PreviewTargetsProviderInterface $targetsProvider;
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
+    $instance = parent::create($container, $configuration, $plugin_id, $plugin_definition);
+    $instance->targetsProvider = $container->get('consumer_node_preview.targets_provider');
+    return $instance;
+  }
 
   /**
    * {@inheritdoc}
@@ -46,8 +61,8 @@ class PreviewTargetWidget extends WidgetBase {
     ];
     $description = $this->t('An absolute http or https URL. It can use the tokens [jsonapi_node_preview], [jsonapi_node_preview_path], [uuid], [view_mode], [layout] and [preview_token].');
     // Show the site's host allowlist, so the rule is known before a save.
-    $hosts = Settings::get('consumer_node_preview', [])['allowed_target_hosts'] ?? NULL;
-    if (is_array($hosts) && $hosts) {
+    $hosts = $this->targetsProvider->getAllowedHosts();
+    if ($hosts) {
       $description = $this->t('@description Allowed hosts: @hosts.', [
         '@description' => $description,
         '@hosts' => implode(', ', $hosts),

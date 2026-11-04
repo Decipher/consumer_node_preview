@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\consumer_node_preview\Kernel;
 
 use Drupal\consumer_node_preview\Plugin\Field\FieldWidget\PreviewTargetWidget;
+use Drupal\consumer_node_preview\PreviewToken;
 use Drupal\consumers\Entity\Consumer;
 use Drupal\Core\Form\FormState;
 use Drupal\KernelTests\KernelTestBase;
@@ -378,6 +379,30 @@ class PreviewTargetsFieldTest extends KernelTestBase {
 
     $this->setSetting('consumer_node_preview', ['default' => $hidden->id() . ':0']);
     $this->assertSame($shown->id() . ':0', $this->provider->getDefaultKey());
+  }
+
+  /**
+   * Tests that only a URL that asks for a preview token gets one.
+   */
+  public function testResolveUrlCreatesTokenOnlyWhenAsked(): void {
+    $node = Node::create(['type' => 'article', 'title' => 'Test']);
+    $node->save();
+    $tokens = $this->createMock(PreviewToken::class);
+    $tokens->expects($this->once())
+      ->method('create')
+      ->with($node->uuid())
+      ->willReturn('cnpt.payload.signature');
+    $this->container->set('consumer_node_preview.preview_token', $tokens);
+    // Build the provider again, with the token service above.
+    $this->container->set('consumer_node_preview.targets_provider', NULL);
+    $provider = $this->container->get('consumer_node_preview.targets_provider');
+
+    $this->assertSame(
+      'https://preview.example.com/p#t=cnpt.payload.signature',
+      $provider->resolveUrl('https://preview.example.com/p#t=[preview_token]', $node, 'full'),
+    );
+    // A URL without the token creates none.
+    $provider->resolveUrl('https://preview.example.com/p#[uuid]', $node, 'full');
   }
 
   /**

@@ -60,6 +60,15 @@ class PreviewTokenTest extends KernelTestBase {
   }
 
   /**
+   * Tests that the constraint still takes its groups by position.
+   */
+  public function testConstraintArgumentOrder(): void {
+    $constraint = new PreviewTargetUrlConstraint(NULL, 'Custom message', ['Custom']);
+    $this->assertSame('Custom message', $constraint->message);
+    $this->assertSame(['Custom'], $constraint->groups);
+  }
+
+  /**
    * Tests what the host allowlist admits.
    */
   public function testAllowedHosts(): void {

@@ -96,6 +96,26 @@ class PreviewTokenTest extends KernelTestBase {
   }
 
   /**
+   * Tests that a signed token without its user, node or expiry is refused.
+   */
+  public function testSignedTokenWithMissingClaims(): void {
+    $tokens = new class($this->createMock(AccountInterface::class), $this->container->get('private_key'), $this->container->get('datetime.time'), $this->container->get('config.factory')) extends PreviewToken {
+
+      /**
+       * Signs any payload, as only the site itself can.
+       */
+      public function signed(mixed $claims): string {
+        $payload = rtrim(strtr(base64_encode((string) json_encode($claims)), '+/', '-_'), '=');
+        return self::PREFIX . $payload . '.' . $this->sign($payload);
+      }
+
+    };
+    $this->assertNull($tokens->read($tokens->signed(['n' => self::UUID, 'e' => PHP_INT_MAX])));
+    $this->assertNull($tokens->read($tokens->signed(['u' => 7, 'e' => PHP_INT_MAX])));
+    $this->assertNull($tokens->read($tokens->signed('not claims')));
+  }
+
+  /**
    * Tests that the constraint still takes its groups by position.
    */
   public function testConstraintArgumentOrder(): void {

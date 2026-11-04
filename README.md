@@ -65,12 +65,13 @@ drush en consumer_node_preview
    credentials from that origin, not a wildcard:
 
    ```yaml
-   cors.config:
-     enabled: true
-     allowedHeaders: ['*']
-     allowedMethods: ['GET']
-     allowedOrigins: ['http://localhost:3000']
-     supportsCredentials: true
+   parameters:
+     cors.config:
+       enabled: true
+       allowedHeaders: ['*']
+       allowedMethods: ['GET']
+       allowedOrigins: ['http://localhost:3000']
+       supportsCredentials: true
    ```
 
 3. Edit a node, change something, and press **Preview**.

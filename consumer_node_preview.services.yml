@@ -18,6 +18,7 @@ services:
     class: Drupal\consumer_node_preview\PreviewToken
     arguments:
       - '@current_user'
-      - '@private_key'
       - '@datetime.time'
       - '@config.factory'
+      - '@module_handler'
+      - '@?jwt.transcoder'

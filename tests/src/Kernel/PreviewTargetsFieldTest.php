@@ -443,26 +443,47 @@ class PreviewTargetsFieldTest extends KernelTestBase {
 
   /**
    * Tests that only a URL that asks for a preview token gets one.
+   *
+   * The token names the path of the node's preview document, without its
+   * query, as JWT Path Authentication compares it.
    */
   public function testResolveUrlCreatesTokenOnlyWhenAsked(): void {
     $node = Node::create(['type' => 'article', 'title' => 'Test']);
     $node->save();
+    $path = parse_url((string) $this->provider->getEndpoint($node, FALSE), PHP_URL_PATH);
+    $this->assertStringEndsWith('/jsonapi/node/article/' . $node->uuid() . '/preview', (string) $path);
     $tokens = $this->createMock(PreviewToken::class);
     $tokens->expects($this->once())
       ->method('create')
-      ->with($node->uuid())
-      ->willReturn(PreviewToken::PREFIX . 'payload.signature');
+      ->with($path)
+      ->willReturn('header.payload.signature');
     $this->container->set('consumer_node_preview.preview_token', $tokens);
     // Build the provider again, with the token service above.
     $this->container->set('consumer_node_preview.targets_provider', NULL);
     $provider = $this->container->get('consumer_node_preview.targets_provider');
 
     $this->assertSame(
-      'https://preview.example.com/p#t=' . PreviewToken::PREFIX . 'payload.signature',
+      'https://preview.example.com/p#t=header.payload.signature',
       $provider->resolveUrl('https://preview.example.com/p#t=[preview_token]', $node, 'full'),
     );
     // A URL without the token creates none.
     $provider->resolveUrl('https://preview.example.com/p#[uuid]', $node, 'full');
+  }
+
+  /**
+   * Tests that a node with no preview document gets an empty token.
+   *
+   * There is no path for the token to name.
+   */
+  public function testNoTokenWithoutEndpoint(): void {
+    $node = Node::create(['type' => 'missing', 'title' => 'Test']);
+    $tokens = $this->createMock(PreviewToken::class);
+    $tokens->expects($this->never())->method('create');
+    $this->container->set('consumer_node_preview.preview_token', $tokens);
+    $this->container->set('consumer_node_preview.targets_provider', NULL);
+    $provider = $this->container->get('consumer_node_preview.targets_provider');
+
+    $this->assertSame('https://preview.example.com/p#t=', $provider->resolveUrl('https://preview.example.com/p#t=[preview_token]', $node, 'full'));
   }
 
   /**

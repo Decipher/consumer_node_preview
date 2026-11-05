@@ -280,17 +280,20 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
       '[view_mode]' => rawurlencode($view_mode_id),
       '[layout]' => rawurlencode($layout),
     ];
-    // Only a URL that asks for one gets a token, so a frontend that reads the
-    // preview with the editor's session never holds one.
-    if (str_contains($url, '[preview_token]')) {
-      $replacements['[preview_token]'] = $this->previewToken->create((string) $node_preview->uuid());
-    }
     // Without an endpoint, the endpoint tokens stay as they are. A visible
     // token is easier to debug than an empty fragment.
     $endpoint = $this->getEndpoint($node_preview);
-    if ($endpoint !== NULL) {
+    $endpoint_path = $this->getEndpoint($node_preview, FALSE);
+    if ($endpoint !== NULL && $endpoint_path !== NULL) {
       $replacements['[jsonapi_node_preview]'] = $endpoint;
-      $replacements['[jsonapi_node_preview_path]'] = (string) $this->getEndpoint($node_preview, FALSE);
+      $replacements['[jsonapi_node_preview_path]'] = $endpoint_path;
+    }
+    // Only a URL that asks for one gets a token, so a frontend that reads the
+    // preview with the editor's session never holds one. The token opens the
+    // document's path, so without one there is nothing for it to open.
+    if (str_contains($url, '[preview_token]')) {
+      $path = $endpoint_path === NULL ? NULL : parse_url($endpoint_path, PHP_URL_PATH);
+      $replacements['[preview_token]'] = is_string($path) ? $this->previewToken->create($path) : '';
     }
     return strtr($url, $replacements);
   }

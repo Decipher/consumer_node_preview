@@ -5,29 +5,23 @@ declare(strict_types=1);
 namespace Drupal\consumer_node_preview;
 
 use Drupal\Component\Datetime\TimeInterface;
-use Drupal\Component\Utility\Crypt;
 use Drupal\Core\Config\ConfigFactoryInterface;
-use Drupal\Core\PrivateKey;
+use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Session\AccountInterface;
-use Drupal\Core\Site\Settings;
+use Drupal\jwt\JsonWebToken\JsonWebToken;
+use Drupal\jwt\Transcoder\JwtTranscoderInterface;
 
 /**
  * Short-lived tokens that let a frontend read one node preview as its editor.
  *
  * A frontend on another site never receives the editor's session cookie. The
- * [preview_token] URL token gives it this instead: a signed statement of which
- * user may read which preview, until when. It carries no session and grants
- * nothing by itself. A site's authentication provider decides where to accept
- * it, and should accept it only on the preview route for its node.
+ * [preview_token] URL token gives it this instead: a JSON Web Token that the
+ * JWT module's JWT Path Authentication submodule accepts. It names the editor
+ * and the path of one preview document, and expires.
  *
- * cspell:ignore cnpt
+ * Without that submodule, or without a key for JWT, the token is empty.
  */
 class PreviewToken {
-
-  /**
-   * What every token starts with, so a provider can tell it from others.
-   */
-  public const PREFIX = 'cnpt.';
 
   /**
    * The default lifetime, in seconds.
@@ -36,69 +30,39 @@ class PreviewToken {
 
   public function __construct(
     protected AccountInterface $currentUser,
-    protected PrivateKey $privateKey,
     protected TimeInterface $time,
     protected ConfigFactoryInterface $configFactory,
+    protected ModuleHandlerInterface $moduleHandler,
+    protected ?JwtTranscoderInterface $transcoder = NULL,
   ) {}
 
   /**
-   * Creates a token for the current user and a node preview.
+   * Creates a token for the current user and one path.
    *
-   * @param string $uuid
-   *   The previewed node's UUID.
+   * @param string $path
+   *   The path the token opens, with any base path and without a query.
    *
    * @return string
-   *   The token.
+   *   The token, or an empty string when JWT Path Authentication is not set
+   *   up.
    */
-  public function create(string $uuid): string {
+  public function create(string $path): string {
+    if (!$this->transcoder instanceof JwtTranscoderInterface || !$this->moduleHandler->moduleExists('jwt_path_auth')) {
+      return '';
+    }
+    // The transcoder fails, rather than returning nothing, without a key.
+    if (!$this->configFactory->get('jwt.config')->get('key_id')) {
+      return '';
+    }
     $lifetime = $this->configFactory->get('consumer_node_preview.settings')->get('token_lifetime');
     $lifetime = is_int($lifetime) && $lifetime > 0 ? $lifetime : self::LIFETIME;
-    $payload = rtrim(strtr(base64_encode(json_encode([
-      'u' => (int) $this->currentUser->id(),
-      'n' => $uuid,
-      'e' => $this->time->getCurrentTime() + $lifetime,
-    ], JSON_THROW_ON_ERROR)), '+/', '-_'), '=');
-    return self::PREFIX . $payload . '.' . $this->sign($payload);
-  }
-
-  /**
-   * Reads a token.
-   *
-   * @param string $token
-   *   The token.
-   *
-   * @return array{uid: int, uuid: string}|null
-   *   The user and the node's UUID, or NULL for a forged or expired token.
-   */
-  public function read(string $token): ?array {
-    if (!str_starts_with($token, self::PREFIX)) {
-      return NULL;
-    }
-    $parts = explode('.', substr($token, strlen(self::PREFIX)));
-    if (count($parts) !== 2 || !hash_equals($this->sign($parts[0]), $parts[1])) {
-      return NULL;
-    }
-    $claims = json_decode(base64_decode(strtr($parts[0], '-_', '+/')), TRUE);
-    if (!is_array($claims) || !isset($claims['u'], $claims['n'], $claims['e'])) {
-      return NULL;
-    }
-    if ((int) $claims['e'] <= $this->time->getCurrentTime()) {
-      return NULL;
-    }
-    return ['uid' => (int) $claims['u'], 'uuid' => (string) $claims['n']];
-  }
-
-  /**
-   * Signs a payload with this site's own secrets.
-   *
-   * @param string $payload
-   *   The encoded payload.
-   *
-   * @return string
-   *   The URL-safe signature.
-   */
-  protected function sign(string $payload): string {
-    return Crypt::hmacBase64('consumer_node_preview:' . $payload, $this->privateKey->get() . Settings::getHashSalt());
+    $now = $this->time->getCurrentTime();
+    $jwt = new JsonWebToken();
+    $jwt->setClaim('iat', $now);
+    $jwt->setClaim('exp', $now + $lifetime);
+    $jwt->setClaim(['drupal', 'path_auth', 'uid'], (int) $this->currentUser->id());
+    $jwt->setClaim(['drupal', 'path_auth', 'path'], $path);
+    return $this->transcoder->encode($jwt) ?? '';
   }
 
 }

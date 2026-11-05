@@ -40,6 +40,8 @@ Submit bug reports and feature suggestions, or track changes in the
 - [Consumers](https://www.drupal.org/project/consumers)
 - [JSON:API Node Preview](https://www.drupal.org/project/jsonapi_node_preview)
 - JSON:API and Node (Drupal core)
+- Optional: [JWT](https://www.drupal.org/project/jwt) 2.4 or later, for a
+  frontend on another site
 
 JSON:API Node Preview 1.0.0-beta5 and earlier have bugs with paragraphs and with
 JSON:API Resources. Until a release includes the fixes, apply them from
@@ -123,7 +125,7 @@ A target URL can use these tokens:
 | `[uuid]` | The node's UUID |
 | `[view_mode]` | The view mode being previewed |
 | `[layout]` | The layout picked, or nothing |
-| `[preview_token]` | A signed token for the editor and this node, for a frontend on another site |
+| `[preview_token]` | A short-lived token for the editor and this node's preview document, for a frontend on another site |
 
 Put the document URL in the fragment, so it stays out of the frontend's server
 logs:
@@ -143,30 +145,66 @@ const response = await fetch(url, { credentials: 'include' })
 
 ### Previewing on another site
 
-A frontend on another site never gets the editor's session cookie. Put the
-token after the document URL in the fragment:
+A frontend on another site never gets the editor's session cookie. This
+includes a tunnel such as `*.trycloudflare.com`. For that, install the
+JWT Path Authentication module that comes with
+[JWT](https://www.drupal.org/project/jwt):
 
-```text
-https://preview.example.com/node/preview?vm=[view_mode]#[jsonapi_node_preview];token=[preview_token]
+```bash
+composer require drupal/jwt
+drush en jwt_path_auth
 ```
 
-Split it off before you fetch, and send it as a bearer token without
-credentials. The token then never leaves the browser in a URL:
+1. Add a key at **Administration > Configuration > System > Keys**, with the
+   type "JWT HMAC Key", and pick it at `/admin/config/system/jwt`.
+2. Add `/jsonapi/` to the path prefixes at
+   `/admin/config/system/jwt/path-auth`.
+3. Put the token after the document URL in the fragment:
+
+   ```text
+   https://preview.example.com/node/preview?vm=[view_mode]#[jsonapi_node_preview];token=[preview_token]
+   ```
+
+The frontend splits it off and sends it as the `jwt` query parameter, without
+credentials:
 
 ```js
 const [url, token] = decodeURIComponent(location.hash.slice(1)).split(';token=')
-const response = await fetch(url, {
-  headers: { Authorization: `Bearer ${token}` },
-  credentials: 'omit',
-})
+const request = new URL(url, location.href)
+request.searchParams.set('jwt', token)
+const response = await fetch(request, { credentials: 'omit' })
 ```
 
-The module creates the token but doesn't accept it. Your site needs an
-authentication provider that reads it with the
-`consumer_node_preview.preview_token` service. Accept it only on the preview
-route of the node it names, and only for an active user, and keep those
-requests out of the page cache. A token lasts 15 minutes, unless you change
-that on the **Preview** tab.
+The token opens only that node's preview document, as the editor. It lasts 15
+minutes, unless you change that on the **Preview** tab, and JWT allows five
+more minutes for clocks that differ. Without JWT Path
+Authentication and a key, `[preview_token]` is empty.
+
+The frontend fetches without credentials, so CORS can allow any origin, which
+suits tunnels whose host names change:
+
+```yaml
+parameters:
+  cors.config:
+    enabled: true
+    allowedHeaders: ['*']
+    allowedMethods: ['GET']
+    allowedOrigins: ['*']
+    supportsCredentials: false
+```
+
+On a site that also uses Simple OAuth, turn off the JWT module's own provider
+for `Authorization: Bearer` headers. It takes every bearer token, so Simple
+OAuth's tokens stop working (https://www.drupal.org/i/3500758). JWT Path
+Authentication doesn't use it. Add this to `sites/default/services.yml`, which
+defines the service again without its tag:
+
+```yaml
+services:
+  jwt.authentication.jwt:
+    class: Drupal\jwt\Authentication\Provider\JwtAuth
+    arguments: ['@jwt.transcoder', '@event_dispatcher', '@settings', '@logger.channel.jwt']
+```
 
 ## Troubleshooting
 
@@ -176,8 +214,9 @@ The editor's session cookie probably didn't reach Drupal. The cookie is
 `SameSite=Lax`, so the frontend and Drupal must share a site, such as
 `www.example.com` and `cms.example.com`. Ports and subdomains can differ.
 
-For a frontend on another domain, give it a host name on your domain, or proxy
-Drupal through it and use `[jsonapi_node_preview_path]`.
+For a frontend on another domain or a tunnel, give it a token. See "Previewing
+on another site". Or proxy Drupal through it and use
+`[jsonapi_node_preview_path]`.
 
 Also check CORS, `credentials: 'include'`, and any `X-Frame-Options` or
 `frame-ancestors` rule on the frontend.

@@ -8,14 +8,19 @@ use Drupal\Component\Datetime\TimeInterface;
 use Drupal\consumer_node_preview\Plugin\Validation\Constraint\PreviewTargetUrlConstraint;
 use Drupal\consumer_node_preview\Plugin\Validation\Constraint\PreviewTargetUrlConstraintValidator;
 use Drupal\consumer_node_preview\PreviewToken;
+use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Session\AccountInterface;
+use Drupal\key\Entity\Key;
 use Drupal\KernelTests\KernelTestBase;
+use Drupal\user\Entity\User;
+use Drupal\user\UserInterface;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Validator\Context\ExecutionContextInterface;
 
 /**
- * Tests the preview token and the target host allowlist.
+ * Tests the preview token with JWT Path Authentication, and the host allowlist.
  */
 #[Group('consumer_node_preview')]
 #[RunTestsInSeparateProcesses]
@@ -38,81 +43,107 @@ class PreviewTokenTest extends KernelTestBase {
     'jsonapi_node_preview',
     'consumers',
     'consumer_node_preview',
+    'key',
+    'jwt',
+    'jwt_path_auth',
   ];
 
-  private const UUID = '639d65b0-6903-53e7-8b5c-4c1d3b4a1953';
+  private const PATH = '/jsonapi/node/page/639d65b0-6903-53e7-8b5c-4c1d3b4a1953/preview';
+
+  /**
+   * The editor the tokens are for.
+   */
+  private UserInterface $user;
 
   /**
    * {@inheritdoc}
    */
   protected function setUp(): void {
     parent::setUp();
-    $this->installConfig(['consumer_node_preview']);
+    $this->installEntitySchema('user');
+    $this->installConfig(['consumer_node_preview', 'jwt_path_auth']);
+    Key::create([
+      'id' => 'preview',
+      'label' => 'Preview',
+      'key_type' => 'jwt_hs',
+      'key_type_settings' => ['algorithm' => 'HS256'],
+      'key_provider' => 'config',
+      'key_provider_settings' => ['key_value' => str_repeat('k', 64)],
+    ])->save();
+    $this->config('jwt.config')->set('algorithm', 'HS256')->set('key_id', 'preview')->save();
+    $this->config('jwt_path_auth.config')->set('allowed_path_prefixes', ['/jsonapi/'])->save();
+    // User 1 first, so the editor is an ordinary account.
+    User::create(['name' => 'admin', 'status' => 1])->save();
+    $this->user = User::create(['name' => 'editor', 'status' => 1]);
+    $this->user->save();
   }
 
   /**
-   * Returns a token service for user 7, at a moment in time.
+   * Returns a token service for the editor, at a moment in time.
    */
-  private function tokens(int $now): PreviewToken {
-    $account = $this->createMock(AccountInterface::class);
-    $account->method('id')->willReturn(7);
+  private function tokens(int $now, bool $path_auth = TRUE): PreviewToken {
     $time = $this->createMock(TimeInterface::class);
     $time->method('getCurrentTime')->willReturn($now);
-    return new PreviewToken($account, $this->container->get('private_key'), $time, $this->container->get('config.factory'));
+    $modules = $this->createMock(ModuleHandlerInterface::class);
+    $modules->method('moduleExists')->willReturnMap([['jwt_path_auth', $path_auth]]);
+    return new PreviewToken($this->user, $time, $this->container->get('config.factory'), $modules, $this->container->get('jwt.transcoder'));
   }
 
   /**
-   * Tests that a token states its user and node, and lasts its lifetime.
+   * Returns the user JWT Path Authentication finds for a token and a path.
    */
-  public function testRoundTripAndExpiry(): void {
-    $token = $this->tokens(1000)->create(self::UUID);
-    $this->assertStringStartsWith(PreviewToken::PREFIX, $token);
-    $this->assertSame(['uid' => 7, 'uuid' => self::UUID], $this->tokens(1899)->read($token));
-    $this->assertNull($this->tokens(1900)->read($token));
+  private function authenticate(string $token, string $path = self::PATH): ?AccountInterface {
+    $request = Request::create($path, 'GET', ['jwt' => $token]);
+    $provider = $this->container->get('jwt_path_auth.authentication.jwt');
+    $this->assertTrue($provider->applies($request));
+    return $provider->authenticate($request);
   }
 
   /**
-   * Tests that the token_lifetime setting changes how long a token lasts.
+   * Tests that JWT Path Authentication accepts a token on its own path only.
    */
-  public function testLifetimeSetting(): void {
-    $this->config('consumer_node_preview.settings')->set('token_lifetime', 60)->save();
-    $token = $this->tokens(1000)->create(self::UUID);
-    $this->assertNotNull($this->tokens(1059)->read($token));
-    $this->assertNull($this->tokens(1060)->read($token));
+  public function testAcceptedOnItsPathOnly(): void {
+    $token = $this->tokens(time())->create(self::PATH);
+    $this->assertSame($this->user->id(), $this->authenticate($token)?->id());
+    $this->assertNull($this->authenticate($token, '/jsonapi/node/page/00000000-0000-0000-0000-000000000000/preview'));
+    $this->assertNull($this->authenticate($token, '/jsonapi/user/user'));
   }
 
   /**
-   * Tests that a changed payload, signature or prefix is refused.
+   * Tests that a token lasts its lifetime, which the setting changes.
+   *
+   * JWT allows five minutes of clock drift, so the expired tokens are older.
    */
-  public function testForgeries(): void {
-    $tokens = $this->tokens(1000);
-    $token = $tokens->create(self::UUID);
-    [, $payload, $signature] = explode('.', $token);
-    $other = rtrim(strtr(base64_encode((string) json_encode(['u' => 1, 'n' => self::UUID, 'e' => 9999])), '+/', '-_'), '=');
-    $this->assertNull($tokens->read(PreviewToken::PREFIX . $other . '.' . $signature));
-    $this->assertNull($tokens->read(PreviewToken::PREFIX . $payload . '.x'));
-    $this->assertNull($tokens->read($payload . '.' . $signature));
-    $this->assertNull($tokens->read(PreviewToken::PREFIX . $payload));
+  public function testLifetime(): void {
+    $this->assertNotNull($this->authenticate($this->tokens(time() - PreviewToken::LIFETIME + 60)->create(self::PATH)));
+    $this->assertNull($this->authenticate($this->tokens(time() - PreviewToken::LIFETIME - 400)->create(self::PATH)));
+
+    $this->config('consumer_node_preview.settings')->set('token_lifetime', 120)->save();
+    $this->assertNotNull($this->authenticate($this->tokens(time() - 60)->create(self::PATH)));
+    $this->assertNull($this->authenticate($this->tokens(time() - 120 - 400)->create(self::PATH)));
   }
 
   /**
-   * Tests that a signed token without its user, node or expiry is refused.
+   * Tests that a blocked editor's token is refused.
    */
-  public function testSignedTokenWithMissingClaims(): void {
-    $tokens = new class($this->createMock(AccountInterface::class), $this->container->get('private_key'), $this->container->get('datetime.time'), $this->container->get('config.factory')) extends PreviewToken {
+  public function testBlockedEditor(): void {
+    $token = $this->tokens(time())->create(self::PATH);
+    $this->user->block()->save();
+    $this->assertNull($this->authenticate($token));
+  }
 
-      /**
-       * Signs any payload, as only the site itself can.
-       */
-      public function signed(mixed $claims): string {
-        $payload = rtrim(strtr(base64_encode((string) json_encode($claims)), '+/', '-_'), '=');
-        return self::PREFIX . $payload . '.' . $this->sign($payload);
-      }
-
-    };
-    $this->assertNull($tokens->read($tokens->signed(['n' => self::UUID, 'e' => PHP_INT_MAX])));
-    $this->assertNull($tokens->read($tokens->signed(['u' => 7, 'e' => PHP_INT_MAX])));
-    $this->assertNull($tokens->read($tokens->signed('not claims')));
+  /**
+   * Tests that there is no token until JWT Path Authentication is set up.
+   */
+  public function testEmptyWithoutJwtPathAuth(): void {
+    $this->assertSame('', $this->tokens(time(), FALSE)->create(self::PATH));
+    $time = $this->container->get('datetime.time');
+    $modules = $this->container->get('module_handler');
+    $this->assertSame('', (new PreviewToken($this->user, $time, $this->container->get('config.factory'), $modules))->create(self::PATH));
+    // JWT makes no token without a key.
+    $this->config('jwt.config')->set('key_id', '')->save();
+    $this->container->set('jwt.transcoder', NULL);
+    $this->assertSame('', $this->tokens(time())->create(self::PATH));
   }
 
   /**

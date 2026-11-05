@@ -499,6 +499,39 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
   }
 
   /**
+   * Tests that a stored target on a host no longer allowed blocks nothing.
+   *
+   * Another frontend can still register, and the old target stays as it is.
+   * A new URL on that host is still refused.
+   */
+  public function testRegisterBesideTargetOnHostNoLongerAllowed(): void {
+    $this->giveTargets([
+      ['label' => 'Old', 'url' => 'https://old.example.com/p'],
+    ]);
+    $this->config('consumer_node_preview.settings')
+      ->set('allowed_target_hosts', ['new.example.com'])
+      ->save();
+    $this->setCurrentUser($this->owner);
+    $uuid = $this->consumer->uuid();
+    $storage = $this->container->get('entity_type.manager')->getStorage('consumer');
+
+    $response = $this->call('PATCH', [
+      'target' => ['label' => 'New', 'url' => 'https://new.example.com/p'],
+    ], $uuid);
+    $this->assertSame(200, $response->getStatusCode(), (string) $response->getContent());
+    $storage->resetCache([$this->consumer->id()]);
+    $this->assertSame([
+      ['label' => 'Old', 'url' => 'https://old.example.com/p'],
+      ['label' => 'New', 'url' => 'https://new.example.com/p'],
+    ], $this->storedTargets());
+
+    $response = $this->call('PATCH', [
+      'target' => ['label' => 'Other', 'url' => 'https://old.example.com/other'],
+    ], $uuid);
+    $this->assertSame(422, $response->getStatusCode());
+  }
+
+  /**
    * Tests that a PATCH has the same access rules as a PUT.
    */
   public function testRegisterAccess(): void {

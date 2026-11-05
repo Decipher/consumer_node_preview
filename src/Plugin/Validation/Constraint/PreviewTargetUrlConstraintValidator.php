@@ -6,6 +6,10 @@ namespace Drupal\consumer_node_preview\Plugin\Validation\Constraint;
 
 use Drupal\consumer_node_preview\PreviewTargetsProviderInterface;
 use Drupal\Core\DependencyInjection\ContainerInjectionInterface;
+use Drupal\Core\Entity\ContentEntityInterface;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\Field\FieldItemInterface;
+use Drupal\Core\TypedData\TypedDataInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\ConstraintValidator;
@@ -17,13 +21,17 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
 
   final public function __construct(
     protected PreviewTargetsProviderInterface $targetsProvider,
+    protected EntityTypeManagerInterface $entityTypeManager,
   ) {}
 
   /**
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container): static {
-    return new static($container->get('consumer_node_preview.targets_provider'));
+    return new static(
+      $container->get('consumer_node_preview.targets_provider'),
+      $container->get('entity_type.manager'),
+    );
   }
 
   /**
@@ -50,9 +58,37 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
       $this->context->addViolation($constraint->message, ['%url' => $value]);
       return;
     }
-    if (!$this->targetsProvider->isAllowedHost(strtolower($parts['host']))) {
+    if (!$this->targetsProvider->isAllowedHost(strtolower($parts['host'])) && !$this->isStored($value)) {
       $this->context->addViolation($constraint->hostMessage, ['%host' => $parts['host']]);
     }
+  }
+
+  /**
+   * Checks whether the consumer already has this URL saved.
+   *
+   * A saved target on a host taken off the allowlist stays out of the
+   * Frontend picker. Keeping it must not stop the consumer saving, or one
+   * frontend's old target would block another frontend's registration.
+   *
+   * @param string $url
+   *   The URL being validated.
+   */
+  protected function isStored(string $url): bool {
+    $property = $this->context->getObject();
+    $item = $property instanceof TypedDataInterface ? $property->getParent() : NULL;
+    if (!$item instanceof FieldItemInterface) {
+      return FALSE;
+    }
+    $entity = $item->getEntity();
+    if ($entity->isNew()) {
+      return FALSE;
+    }
+    $stored = $this->entityTypeManager->getStorage($entity->getEntityTypeId())->loadUnchanged($entity->id());
+    if (!$stored instanceof ContentEntityInterface || !$stored->hasField($item->getFieldDefinition()->getName())) {
+      return FALSE;
+    }
+    $urls = array_column($stored->get($item->getFieldDefinition()->getName())->getValue(), 'url');
+    return in_array($url, $urls, TRUE);
   }
 
 }

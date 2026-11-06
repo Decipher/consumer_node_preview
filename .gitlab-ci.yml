@@ -81,9 +81,6 @@ phpstan (previous major):
 stylelint:
   allow_failure: false
 
-# Drupal 10 runs PHPUnit 9, which needs a configuration in its own format.
-# Its test bootstrap changes directory into web/, and PHPUnit 9 then reads the
-# configuration file again from there, so the path must be absolute.
 # Simple OAuth, which the tests use, needs PHP 8.2 or later and sodium, and the
 # PHP 8.1 image has no sodium. CORE_PREVIOUS_PHP_MIN is a CI/CD settings
 # variable, so a value under variables: above does nothing. The other Drupal 10
@@ -92,6 +89,9 @@ composer (previous major):
   variables:
     PHP_VERSION: '8.3'
 
+# Drupal 10 runs PHPUnit 9, which needs a configuration in its own format.
+# Its test bootstrap changes directory into web/, and PHPUnit 9 then reads the
+# configuration file again from there, so the path must be absolute.
 phpunit (previous major):
   variables:
     _PHPUNIT_EXTRA: '--no-coverage --configuration=$CI_PROJECT_DIR/phpunit.gitlab-ci.d10.xml'

@@ -51,7 +51,9 @@ variables:
   OPT_IN_TEST_PREVIOUS_MINOR: 1
   OPT_IN_TEST_NEXT_MINOR: 1
   OPT_IN_TEST_NEXT_MAJOR: 1
-  CORE_PREVIOUS_PHP_MIN: 8.1
+  # Simple OAuth, which the tests use, needs PHP 8.2 or later and sodium. The
+  # PHP 8.1 image has no sodium.
+  CORE_PREVIOUS_PHP_MIN: 8.3
   # The phpunit binary (_PHPUNIT_CONCURRENT: 0) loads phpunit.xml from the
   # project root. That file is the scaffold config for local and GitHub runs.
   # This flag points the binary at the DrupalCI config instead.

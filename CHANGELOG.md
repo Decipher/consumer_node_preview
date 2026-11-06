@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 1.0.0-beta1 (2026-11-06)
 
 ### Added
 
@@ -51,8 +51,7 @@ and this project adheres to
 - Expiry for registered targets. A target that its frontend has not
   registered for a day moves to an Inactive targets group in the Frontend picker,
   where it can still be picked. Cron deletes it after 30 days. The Preview tab
-  changes the two limits. Targets
-  added by hand never expire.
+  changes the two limits. Targets added by hand never expire.
 - A check of each frontend from the editor's browser when the preview opens.
   A frontend that does not answer in 3 seconds shows "(not responding)" in
   the Frontend picker, and can still be picked. Inactive targets are not

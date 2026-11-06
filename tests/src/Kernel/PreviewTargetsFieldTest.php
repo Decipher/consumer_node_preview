@@ -444,18 +444,16 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   /**
    * Tests that only a URL that asks for a preview token gets one.
    *
-   * The token names the path of the node's preview document, without its
-   * query, as JWT Path Authentication compares it.
+   * The token is issued to the target's consumer. Without one, it is empty.
    */
   public function testResolveUrlCreatesTokenOnlyWhenAsked(): void {
     $node = Node::create(['type' => 'article', 'title' => 'Test']);
     $node->save();
-    $path = parse_url((string) $this->provider->getEndpoint($node, FALSE), PHP_URL_PATH);
-    $this->assertStringEndsWith('/jsonapi/node/article/' . $node->uuid() . '/preview', (string) $path);
+    $consumer = $this->createConsumer('App', []);
     $tokens = $this->createMock(PreviewToken::class);
     $tokens->expects($this->once())
       ->method('create')
-      ->with($path)
+      ->with($consumer)
       ->willReturn('header.payload.signature');
     $this->container->set('consumer_node_preview.preview_token', $tokens);
     // Build the provider again, with the token service above.
@@ -464,26 +462,44 @@ class PreviewTargetsFieldTest extends KernelTestBase {
 
     $this->assertSame(
       'https://preview.example.com/p#t=header.payload.signature',
+      $provider->resolveUrl('https://preview.example.com/p#t=[preview_token]', $node, 'full', '', $consumer),
+    );
+    // A URL without the token creates none, and nor does a URL without a
+    // consumer.
+    $provider->resolveUrl('https://preview.example.com/p#[uuid]', $node, 'full', '', $consumer);
+    $this->assertSame(
+      'https://preview.example.com/p#t=',
       $provider->resolveUrl('https://preview.example.com/p#t=[preview_token]', $node, 'full'),
     );
-    // A URL without the token creates none.
-    $provider->resolveUrl('https://preview.example.com/p#[uuid]', $node, 'full');
   }
 
   /**
-   * Tests that a node with no preview document gets an empty token.
+   * Tests that each target carries its consumer.
    *
-   * There is no path for the token to name.
+   * A site target names one by its client ID, and has none without it.
    */
-  public function testNoTokenWithoutEndpoint(): void {
-    $node = Node::create(['type' => 'missing', 'title' => 'Test']);
-    $tokens = $this->createMock(PreviewToken::class);
-    $tokens->expects($this->never())->method('create');
-    $this->container->set('consumer_node_preview.preview_token', $tokens);
-    $this->container->set('consumer_node_preview.targets_provider', NULL);
-    $provider = $this->container->get('consumer_node_preview.targets_provider');
+  public function testTargetsCarryTheirConsumer(): void {
+    $consumer = $this->createConsumer('App', [
+      ['label' => 'Live', 'url' => 'https://example.com/p'],
+    ]);
+    $this->setSetting('consumer_node_preview', [
+      'targets' => [
+        'named' => ['url' => 'https://named.example.com/p', 'consumer' => 'app'],
+        'unknown' => ['url' => 'https://unknown.example.com/p', 'consumer' => 'nope'],
+        'plain' => ['url' => 'https://plain.example.com/p'],
+      ],
+    ]);
+    $targets = $this->provider->getAllTargets();
+    $this->assertSame($consumer->id(), $targets[$consumer->id() . ':0']['consumer']?->id());
+    $this->assertSame($consumer->id(), $targets['settings:named']['consumer']?->id());
+    $this->assertNull($targets['settings:unknown']['consumer']);
+    $this->assertNull($targets['settings:plain']['consumer']);
+    $this->assertSame($consumer->id(), $this->provider->getTargetByKey($consumer->id() . ':0')['consumer']?->id());
+    $this->assertSame($consumer->id(), $this->provider->getTargetByKey('settings:named')['consumer']?->id());
 
-    $this->assertSame('https://preview.example.com/p#t=', $provider->resolveUrl('https://preview.example.com/p#t=[preview_token]', $node, 'full'));
+    // An unpublished consumer is not named.
+    $consumer->set('status', FALSE)->save();
+    $this->assertNull($this->provider->getTargetByKey('settings:named')['consumer']);
   }
 
   /**

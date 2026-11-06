@@ -118,6 +118,7 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
           'label' => $consumer->label() . ': ' . $label,
           'url' => $url,
           'layouts' => $layouts,
+          'consumer' => $consumer,
           'group' => (string) $consumer->label(),
           'option_label' => $label,
           'last_seen' => $last_seen,
@@ -190,7 +191,7 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     if ($target === NULL || !$this->allowsStoredUrl($target['url'])) {
       return NULL;
     }
-    return $target + ['layouts' => $this->getLayouts($consumer)];
+    return $target + ['layouts' => $this->getLayouts($consumer), 'consumer' => $consumer];
   }
 
   /**
@@ -274,26 +275,23 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
   /**
    * {@inheritdoc}
    */
-  public function resolveUrl(string $url, NodeInterface $node_preview, string $view_mode_id, string $layout = ''): string {
+  public function resolveUrl(string $url, NodeInterface $node_preview, string $view_mode_id, string $layout = '', ?ConsumerInterface $consumer = NULL): string {
     $replacements = [
       '[uuid]' => rawurlencode((string) $node_preview->uuid()),
       '[view_mode]' => rawurlencode($view_mode_id),
       '[layout]' => rawurlencode($layout),
     ];
+    // Only a URL that asks for one gets a token, so a frontend that reads the
+    // preview with the editor's session never holds one.
+    if (str_contains($url, '[preview_token]')) {
+      $replacements['[preview_token]'] = $consumer ? $this->previewToken->create($consumer) : '';
+    }
     // Without an endpoint, the endpoint tokens stay as they are. A visible
     // token is easier to debug than an empty fragment.
     $endpoint = $this->getEndpoint($node_preview);
-    $endpoint_path = $this->getEndpoint($node_preview, FALSE);
-    if ($endpoint !== NULL && $endpoint_path !== NULL) {
+    if ($endpoint !== NULL) {
       $replacements['[jsonapi_node_preview]'] = $endpoint;
-      $replacements['[jsonapi_node_preview_path]'] = $endpoint_path;
-    }
-    // Only a URL that asks for one gets a token, so a frontend that reads the
-    // preview with the editor's session never holds one. The token opens the
-    // document's path, so without one there is nothing for it to open.
-    if (str_contains($url, '[preview_token]')) {
-      $path = $endpoint_path === NULL ? NULL : parse_url($endpoint_path, PHP_URL_PATH);
-      $replacements['[preview_token]'] = is_string($path) ? $this->previewToken->create($path) : '';
+      $replacements['[jsonapi_node_preview_path]'] = (string) $this->getEndpoint($node_preview, FALSE);
     }
     return strtr($url, $replacements);
   }
@@ -404,9 +402,10 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
   /**
    * Returns the site's targets from settings.php.
    *
-   * @return array<string, array{label: string, url: string, layouts: list<string>}>
+   * @return array<string, array{label: string, url: string, layouts: list<string>, consumer: \Drupal\consumers\Entity\ConsumerInterface|null}>
    *   The targets that have a URL, keyed by name. A layout with a name
-   *   that does not match the pattern is left out.
+   *   that does not match the pattern is left out. The consumer is the one
+   *   whose client ID the target names, if it is published.
    */
   protected function getSiteTargets(): array {
     $targets = [];
@@ -421,10 +420,26 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
           'label' => (string) ($target['label'] ?? $name),
           'url' => $url,
           'layouts' => array_values(array_unique($layouts)),
+          'consumer' => is_string($target['consumer'] ?? NULL) ? $this->loadConsumer($target['consumer']) : NULL,
         ];
       }
     }
     return $targets;
+  }
+
+  /**
+   * Loads a published consumer by its client ID.
+   *
+   * @param string $client_id
+   *   The client ID.
+   */
+  protected function loadConsumer(string $client_id): ?ConsumerInterface {
+    $consumers = $this->entityTypeManager->getStorage('consumer')->loadByProperties([
+      'client_id' => $client_id,
+      'status' => 1,
+    ]);
+    $consumer = reset($consumers);
+    return $consumer instanceof ConsumerInterface ? $consumer : NULL;
   }
 
 }

@@ -10,9 +10,9 @@ and this project adheres to
 
 ### Added
 
-- A `[preview_token]` URL token: a short-lived JSON Web Token that lets a
-  frontend on another site, or on a tunnel, read one node preview as its
-  editor. The JWT module's JWT Path Authentication accepts it.
+- A `[preview_token]` URL token: a short-lived Simple OAuth access token that
+  lets a frontend on another site, or on a tunnel, read node previews as their
+  editor. It needs Simple OAuth, which is optional.
 - An allowed target hosts setting that limits the hosts a preview target can
   use. The consumer form lists the hosts under the URL field, and a saved
   target on a host that is no longer allowed leaves the Frontend picker.

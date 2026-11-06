@@ -22,9 +22,9 @@
     },
     "require-dev": {
         "drupal/entity_reference_revisions": "^1.12",
-        "drupal/jwt": "^2.4"
+        "drupal/simple_oauth": "^6.1"
     },
     "suggest": {
-        "drupal/jwt": "Its JWT Path Authentication submodule accepts the [preview_token] URL token."
+        "drupal/simple_oauth": "Accepts the [preview_token] URL token, for a frontend on another site."
     }
 }

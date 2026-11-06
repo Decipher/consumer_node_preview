@@ -127,7 +127,7 @@ final class NodePreviewController extends CoreNodePreviewController {
     $targets = [];
     $templates = [];
     foreach ($all as $key => $target) {
-      $template = UrlHelper::stripDangerousProtocols($this->targetsProvider->resolveUrl($target['url'], $node_preview, self::VIEW_MODE_PLACEHOLDER, self::LAYOUT_PLACEHOLDER));
+      $template = UrlHelper::stripDangerousProtocols($this->targetsProvider->resolveUrl($target['url'], $node_preview, self::VIEW_MODE_PLACEHOLDER, self::LAYOUT_PLACEHOLDER, $target['consumer']));
       // A URL without the [layout] token cannot change layout, so its target
       // gets no Layout select.
       if (!str_contains($template, self::LAYOUT_PLACEHOLDER)) {

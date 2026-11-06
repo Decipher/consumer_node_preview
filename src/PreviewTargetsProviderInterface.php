@@ -60,7 +60,7 @@ interface PreviewTargetsProviderInterface {
    * The inactive targets come last. An inactive target is a registered one
    * whose last registration is older than getInactiveAfter().
    *
-   * @return array<string, array{label: string, url: string, layouts: list<string>, group: string, option_label: string, last_seen: int|null, inactive: bool}>
+   * @return array<string, array{label: string, url: string, layouts: list<string>, consumer: \Drupal\consumers\Entity\ConsumerInterface|null, group: string, option_label: string, last_seen: int|null, inactive: bool}>
    *   The targets, keyed "settings:<name>" or "<consumer id>:<delta>". A
    *   consumer target's label starts with the consumer's label, and its
    *   layouts are the consumer's. A site target lists its own layouts. The
@@ -69,7 +69,8 @@ interface PreviewTargetsProviderInterface {
    *   inside its group. In the inactive group, it is the label with the
    *   consumer's. The last_seen value is the time of the last registration,
    *   or NULL for a target added by hand. The inactive value is TRUE for a
-   *   target in the inactive group.
+   *   target in the inactive group. The consumer is the target's own, or the
+   *   one a site target names, or NULL.
    */
   public function getAllTargets(): array;
 
@@ -110,7 +111,7 @@ interface PreviewTargetsProviderInterface {
    * @param string $key
    *   A key in the form "settings:<name>" or "<consumer id>:<delta>".
    *
-   * @return array{label: string, url: string, layouts: list<string>}|null
+   * @return array{label: string, url: string, layouts: list<string>, consumer: \Drupal\consumers\Entity\ConsumerInterface|null}|null
    *   The target, or NULL when the key does not resolve.
    */
   public function getTargetByKey(string $key): ?array;
@@ -200,12 +201,15 @@ interface PreviewTargetsProviderInterface {
    *   The view mode.
    * @param string $layout
    *   The layout, or an empty string for none.
+   * @param \Drupal\consumers\Entity\ConsumerInterface|null $consumer
+   *   The target's consumer, which a [preview_token] is issued for.
    *
    * @return string
    *   The URL with [jsonapi_node_preview], [jsonapi_node_preview_path],
-   *   [uuid], [view_mode] and [layout] replaced. When JSON:API has no
-   *   preview for the node's bundle, the two endpoint tokens stay as they are.
+   *   [uuid], [view_mode], [layout] and [preview_token] replaced. When
+   *   JSON:API has no preview for the node's bundle, the two endpoint tokens
+   *   stay as they are. Without a consumer, [preview_token] is empty.
    */
-  public function resolveUrl(string $url, NodeInterface $node_preview, string $view_mode_id, string $layout = ''): string;
+  public function resolveUrl(string $url, NodeInterface $node_preview, string $view_mode_id, string $layout = '', ?ConsumerInterface $consumer = NULL): string;
 
 }

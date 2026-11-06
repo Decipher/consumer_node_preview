@@ -8,10 +8,12 @@ use Drupal\Component\Datetime\TimeInterface;
 use Drupal\consumer_node_preview\Plugin\Validation\Constraint\PreviewTargetUrlConstraint;
 use Drupal\consumer_node_preview\Plugin\Validation\Constraint\PreviewTargetUrlConstraintValidator;
 use Drupal\consumer_node_preview\PreviewToken;
-use Drupal\Core\Extension\ModuleHandlerInterface;
+use Drupal\consumers\Entity\Consumer;
+use Drupal\consumers\Entity\ConsumerInterface;
 use Drupal\Core\Session\AccountInterface;
-use Drupal\key\Entity\Key;
 use Drupal\KernelTests\KernelTestBase;
+use Drupal\simple_oauth\Authentication\TokenAuthUserInterface;
+use Drupal\simple_oauth\Exception\OAuthUnauthorizedHttpException;
 use Drupal\user\Entity\User;
 use Drupal\user\UserInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -20,7 +22,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Validator\Context\ExecutionContextInterface;
 
 /**
- * Tests the preview token with JWT Path Authentication, and the host allowlist.
+ * Tests the preview token with Simple OAuth, and the target host allowlist.
  */
 #[Group('consumer_node_preview')]
 #[RunTestsInSeparateProcesses]
@@ -43,12 +45,10 @@ class PreviewTokenTest extends KernelTestBase {
     'jsonapi_node_preview',
     'consumers',
     'consumer_node_preview',
-    'key',
-    'jwt',
-    'jwt_path_auth',
+    'options',
+    'path_alias',
+    'simple_oauth',
   ];
-
-  private const PATH = '/jsonapi/node/page/639d65b0-6903-53e7-8b5c-4c1d3b4a1953/preview';
 
   /**
    * The editor the tokens are for.
@@ -56,94 +56,123 @@ class PreviewTokenTest extends KernelTestBase {
   private UserInterface $user;
 
   /**
+   * The consumer the tokens are issued to.
+   */
+  private ConsumerInterface $consumer;
+
+  /**
    * {@inheritdoc}
    */
   protected function setUp(): void {
     parent::setUp();
     $this->installEntitySchema('user');
-    $this->installConfig(['consumer_node_preview', 'jwt_path_auth']);
-    Key::create([
-      'id' => 'preview',
-      'label' => 'Preview',
-      'key_type' => 'jwt_hs',
-      'key_type_settings' => ['algorithm' => 'HS256'],
-      'key_provider' => 'config',
-      'key_provider_settings' => ['key_value' => str_repeat('k', 64)],
-    ])->save();
-    $this->config('jwt.config')->set('algorithm', 'HS256')->set('key_id', 'preview')->save();
-    $this->config('jwt_path_auth.config')->set('allowed_path_prefixes', ['/jsonapi/'])->save();
+    $this->installEntitySchema('consumer');
+    $this->installEntitySchema('oauth2_token');
+    $this->installConfig(['consumer_node_preview', 'simple_oauth']);
+    $keys = $this->siteDirectory . '/keys';
+    mkdir($keys, 0700, TRUE);
+    $this->container->get('simple_oauth.key.generator')->generateKeys($keys);
+    $this->setSetting('simple_oauth.key_permissions_check', FALSE);
+    $this->config('simple_oauth.settings')
+      ->set('private_key', $keys . '/private.key')
+      ->set('public_key', $keys . '/public.key')
+      ->save();
     // User 1 first, so the editor is an ordinary account.
     User::create(['name' => 'admin', 'status' => 1])->save();
     $this->user = User::create(['name' => 'editor', 'status' => 1]);
     $this->user->save();
+    $this->consumer = Consumer::create([
+      'label' => 'App',
+      'client_id' => 'app',
+      'grant_types' => ['authorization_code'],
+    ]);
+    $this->consumer->save();
   }
 
   /**
    * Returns a token service for the editor, at a moment in time.
    */
-  private function tokens(int $now, bool $path_auth = TRUE): PreviewToken {
+  private function tokens(int $now): PreviewToken {
     $time = $this->createMock(TimeInterface::class);
     $time->method('getCurrentTime')->willReturn($now);
-    $modules = $this->createMock(ModuleHandlerInterface::class);
-    $modules->method('moduleExists')->willReturnMap([['jwt_path_auth', $path_auth]]);
-    return new PreviewToken($this->user, $time, $this->container->get('config.factory'), $modules, $this->container->get('jwt.transcoder'));
+    return new PreviewToken(
+      $this->user,
+      $time,
+      $this->container->get('config.factory'),
+      $this->container->get('simple_oauth.repositories.access_token'),
+      $this->container->get('simple_oauth.repositories.client'),
+      $this->container->get('simple_oauth.repositories.scope'),
+    );
   }
 
   /**
-   * Returns the user JWT Path Authentication finds for a token and a path.
+   * Returns the user Simple OAuth finds for a bearer token, or NULL.
    */
-  private function authenticate(string $token, string $path = self::PATH): ?AccountInterface {
-    $request = Request::create($path, 'GET', ['jwt' => $token]);
-    $provider = $this->container->get('jwt_path_auth.authentication.jwt');
+  private function authenticate(string $token): ?AccountInterface {
+    $request = Request::create('/jsonapi');
+    $request->headers->set('Authorization', 'Bearer ' . $token);
+    $provider = $this->container->get('simple_oauth.authentication.simple_oauth');
     $this->assertTrue($provider->applies($request));
-    return $provider->authenticate($request);
+    try {
+      return $provider->authenticate($request);
+    }
+    catch (\Exception $exception) {
+      // Simple OAuth's interface does not declare it, but a refused token
+      // throws this.
+      $this->assertInstanceOf(OAuthUnauthorizedHttpException::class, $exception);
+      return NULL;
+    }
   }
 
   /**
-   * Tests that JWT Path Authentication accepts a token on its own path only.
+   * Tests that Simple OAuth accepts a token as the editor, for the consumer.
    */
-  public function testAcceptedOnItsPathOnly(): void {
-    $token = $this->tokens(time())->create(self::PATH);
-    $this->assertSame($this->user->id(), $this->authenticate($token)?->id());
-    $this->assertNull($this->authenticate($token, '/jsonapi/node/page/00000000-0000-0000-0000-000000000000/preview'));
-    $this->assertNull($this->authenticate($token, '/jsonapi/user/user'));
+  public function testAcceptedBySimpleOauth(): void {
+    $token = $this->tokens(time())->create($this->consumer);
+    $account = $this->authenticate($token);
+    $this->assertInstanceOf(TokenAuthUserInterface::class, $account);
+    $this->assertSame($this->user->id(), $account->id());
+    $this->assertSame($this->consumer->id(), $account->getConsumer()->id());
+    $this->assertNull($this->authenticate($token . 'x'));
   }
 
   /**
    * Tests that a token lasts its lifetime, which the setting changes.
-   *
-   * JWT allows five minutes of clock drift, so the expired tokens are older.
    */
   public function testLifetime(): void {
-    $this->assertNotNull($this->authenticate($this->tokens(time() - PreviewToken::LIFETIME + 60)->create(self::PATH)));
-    $this->assertNull($this->authenticate($this->tokens(time() - PreviewToken::LIFETIME - 400)->create(self::PATH)));
+    $this->assertNotNull($this->authenticate($this->tokens(time() - PreviewToken::LIFETIME + 60)->create($this->consumer)));
+    $this->assertNull($this->authenticate($this->tokens(time() - PreviewToken::LIFETIME - 60)->create($this->consumer)));
 
     $this->config('consumer_node_preview.settings')->set('token_lifetime', 120)->save();
-    $this->assertNotNull($this->authenticate($this->tokens(time() - 60)->create(self::PATH)));
-    $this->assertNull($this->authenticate($this->tokens(time() - 120 - 400)->create(self::PATH)));
+    $this->assertNotNull($this->authenticate($this->tokens(time() - 60)->create($this->consumer)));
+    $this->assertNull($this->authenticate($this->tokens(time() - 180)->create($this->consumer)));
   }
 
   /**
    * Tests that a blocked editor's token is refused.
    */
   public function testBlockedEditor(): void {
-    $token = $this->tokens(time())->create(self::PATH);
+    $token = $this->tokens(time())->create($this->consumer);
     $this->user->block()->save();
     $this->assertNull($this->authenticate($token));
   }
 
   /**
-   * Tests that there is no token until JWT Path Authentication is set up.
+   * Tests that a consumer an editor cannot sign in to gets no token.
    */
-  public function testEmptyWithoutJwtPathAuth(): void {
-    $this->assertSame('', $this->tokens(time(), FALSE)->create(self::PATH));
-    $time = $this->container->get('datetime.time');
-    $modules = $this->container->get('module_handler');
-    $this->assertSame('', (new PreviewToken($this->user, $time, $this->container->get('config.factory'), $modules))->create(self::PATH));
-    // JWT makes no token without a key.
-    $this->config('jwt.config')->set('key_id', '')->save();
-    $this->container->set('jwt.transcoder', NULL);
-    $this->assertSame('', $this->tokens(time())->create(self::PATH));
+  public function testEmptyWithoutAuthorizationCodeGrant(): void {
+    $this->consumer->set('grant_types', ['client_credentials'])->save();
+    $this->assertSame('', $this->tokens(time())->create($this->consumer));
+  }
+
+  /**
+   * Tests that there is no token without Simple OAuth, or without its key.
+   */
+  public function testEmptyWithoutSimpleOauth(): void {
+    $tokens = new PreviewToken($this->user, $this->container->get('datetime.time'), $this->container->get('config.factory'));
+    $this->assertSame('', $tokens->create($this->consumer));
+    $this->config('simple_oauth.settings')->set('private_key', $this->siteDirectory . '/missing.key')->save();
+    $this->assertSame('', $this->tokens(time())->create($this->consumer));
   }
 
   /**

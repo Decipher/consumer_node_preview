@@ -20,5 +20,6 @@ services:
       - '@current_user'
       - '@datetime.time'
       - '@config.factory'
-      - '@module_handler'
-      - '@?jwt.transcoder'
+      - '@?simple_oauth.repositories.access_token'
+      - '@?simple_oauth.repositories.client'
+      - '@?simple_oauth.repositories.scope'

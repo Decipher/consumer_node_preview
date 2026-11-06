@@ -16,6 +16,8 @@ use Drupal\simple_oauth\Authentication\TokenAuthUserInterface;
 use Drupal\simple_oauth\Exception\OAuthUnauthorizedHttpException;
 use Drupal\user\Entity\User;
 use Drupal\user\UserInterface;
+use League\OAuth2\Server\Exception\UniqueTokenIdentifierConstraintViolationException;
+use League\OAuth2\Server\Repositories\AccessTokenRepositoryInterface;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Symfony\Component\HttpFoundation\Request;
@@ -173,6 +175,30 @@ class PreviewTokenTest extends KernelTestBase {
     $this->assertSame('', $tokens->create($this->consumer));
     $this->config('simple_oauth.settings')->set('private_key', $this->siteDirectory . '/missing.key')->save();
     $this->assertSame('', $this->tokens(time())->create($this->consumer));
+    foreach (['empty.key' => '', 'broken.key' => 'not a key'] as $name => $contents) {
+      file_put_contents($this->siteDirectory . '/' . $name, $contents);
+      $this->config('simple_oauth.settings')->set('private_key', $this->siteDirectory . '/' . $name)->save();
+      $this->assertSame('', $this->tokens(time())->create($this->consumer), $name);
+    }
+  }
+
+  /**
+   * Tests that there is no token when Simple OAuth cannot store it.
+   */
+  public function testEmptyWhenNotStored(): void {
+    $repository = $this->container->get('simple_oauth.repositories.access_token');
+    $accessTokens = $this->createMock(AccessTokenRepositoryInterface::class);
+    $accessTokens->method('getNewToken')->willReturnCallback($repository->getNewToken(...));
+    $accessTokens->method('persistNewAccessToken')->willThrowException(UniqueTokenIdentifierConstraintViolationException::create());
+    $tokens = new PreviewToken(
+      $this->user,
+      $this->container->get('datetime.time'),
+      $this->container->get('config.factory'),
+      $accessTokens,
+      $this->container->get('simple_oauth.repositories.client'),
+      $this->container->get('simple_oauth.repositories.scope'),
+    );
+    $this->assertSame('', $tokens->create($this->consumer));
   }
 
   /**

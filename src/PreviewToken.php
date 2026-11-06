@@ -93,9 +93,7 @@ class PreviewToken {
    *   The consumer.
    */
   protected function signsInEditors(ConsumerInterface $consumer): bool {
-    if (!$consumer->hasField('grant_types')) {
-      return FALSE;
-    }
+    // Simple OAuth adds the field, and is installed by now.
     $grants = array_column($consumer->get('grant_types')->getValue(), 'value');
     return in_array('authorization_code', $grants, TRUE);
   }

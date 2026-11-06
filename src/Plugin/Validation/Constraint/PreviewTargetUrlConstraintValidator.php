@@ -80,11 +80,8 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
       return FALSE;
     }
     $entity = $item->getEntity();
-    if ($entity->isNew()) {
-      return FALSE;
-    }
-    $stored = $this->entityTypeManager->getStorage($entity->getEntityTypeId())->loadUnchanged($entity->id());
-    if (!$stored instanceof ContentEntityInterface || !$stored->hasField($item->getFieldDefinition()->getName())) {
+    $stored = $entity->isNew() ? NULL : $this->entityTypeManager->getStorage($entity->getEntityTypeId())->loadUnchanged($entity->id());
+    if (!$stored instanceof ContentEntityInterface) {
       return FALSE;
     }
     $urls = array_column($stored->get($item->getFieldDefinition()->getName())->getValue(), 'url');

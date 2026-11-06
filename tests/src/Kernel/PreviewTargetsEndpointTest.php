@@ -529,6 +529,14 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
       'target' => ['label' => 'Other', 'url' => 'https://old.example.com/other'],
     ], $uuid);
     $this->assertSame(422, $response->getStatusCode());
+
+    // A new consumer has nothing saved, so the host is refused.
+    $new = Consumer::create([
+      'label' => 'New',
+      'client_id' => 'new',
+      'preview_targets' => [['label' => 'Old', 'url' => 'https://old.example.com/p']],
+    ]);
+    $this->assertCount(1, $new->get('preview_targets')->validate());
   }
 
   /**

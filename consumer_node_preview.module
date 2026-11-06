@@ -11,6 +11,7 @@ use Drupal\consumer_node_preview\PreviewTargetsProviderInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Field\BaseFieldDefinition;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
+use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 
 /**
@@ -21,7 +22,7 @@ function consumer_node_preview_entity_base_field_info(EntityTypeInterface $entit
   if ($entity_type->id() === 'consumer') {
     $fields['preview_targets'] = BaseFieldDefinition::create('consumer_preview_target')
       ->setLabel(new TranslatableMarkup('Preview targets'))
-      ->setDescription(new TranslatableMarkup('Frontend URLs that render node previews for this consumer. The URL can use the tokens [jsonapi_node_preview], [jsonapi_node_preview_path], [uuid], [view_mode] and [layout].'))
+      ->setDescription(new TranslatableMarkup('Frontend URLs that render node previews for this consumer. The URL can use the tokens [jsonapi_node_preview], [jsonapi_node_preview_path], [uuid], [view_mode], [layout] and [preview_token].'))
       ->setCardinality(FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED)
       ->setTranslatable(FALSE)
       ->setDisplayOptions('form', [
@@ -48,6 +49,28 @@ function consumer_node_preview_entity_base_field_info(EntityTypeInterface $entit
       ->setDisplayConfigurable('form', TRUE);
   }
   return $fields;
+}
+
+/**
+ * Implements hook_form_BASE_FORM_ID_alter() for consumer_form.
+ *
+ * Puts the preview fields in their own collapsed group, like the groups on
+ * the node form. The group opens when one of its fields has an error.
+ */
+function consumer_node_preview_form_consumer_form_alter(array &$form, FormStateInterface $form_state): void {
+  $form['preview_settings'] = [
+    '#type' => 'details',
+    '#title' => new TranslatableMarkup('Preview settings'),
+    '#open' => FALSE,
+    // Hide the group when the form display hides both fields.
+    '#optional' => TRUE,
+    '#weight' => 10,
+  ];
+  foreach (['preview_targets', 'preview_layouts'] as $field) {
+    if (isset($form[$field])) {
+      $form[$field]['#group'] = 'preview_settings';
+    }
+  }
 }
 
 /**

@@ -11,3 +11,15 @@ services:
       - '@jsonapi.resource_type.repository'
       - '@entity_field.manager'
       - '@datetime.time'
+      - '@consumer_node_preview.preview_token'
+      - '@config.factory'
+
+  consumer_node_preview.preview_token:
+    class: Drupal\consumer_node_preview\PreviewToken
+    arguments:
+      - '@current_user'
+      - '@datetime.time'
+      - '@config.factory'
+      - '@?simple_oauth.repositories.access_token'
+      - '@?simple_oauth.repositories.client'
+      - '@?simple_oauth.repositories.scope'

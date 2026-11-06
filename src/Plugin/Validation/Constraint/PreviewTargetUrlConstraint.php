@@ -28,6 +28,8 @@ class PreviewTargetUrlConstraint extends SymfonyConstraint {
     public string $message = 'The URL %url must be absolute and use http or https.',
     ?array $groups = NULL,
     mixed $payload = NULL,
+    // Last, so callers that pass the other arguments by position still work.
+    public string $hostMessage = 'The preview target host %host is not allowed on this site.',
   ) {
     parent::__construct($options, $groups, $payload);
   }

@@ -1,0 +1,10 @@
+consumer_node_preview.consumers:
+  title: 'Consumers'
+  route_name: entity.consumer.collection
+  base_route: entity.consumer.collection
+
+consumer_node_preview.settings:
+  title: 'Preview'
+  route_name: consumer_node_preview.settings
+  base_route: entity.consumer.collection
+  weight: 10

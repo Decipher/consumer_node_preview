@@ -20,3 +20,11 @@ consumer_node_preview.drupal:
     parameters:
       node_preview:
         type: 'node_preview'
+
+consumer_node_preview.settings:
+  path: '/admin/config/services/consumer/preview'
+  defaults:
+    _form: '\Drupal\consumer_node_preview\Form\SettingsForm'
+    _title: 'Preview settings'
+  requirements:
+    _permission: 'administer consumer entities'

@@ -21,6 +21,10 @@
         "drupal/jsonapi_node_preview": "^1.0@beta"
     },
     "require-dev": {
-        "drupal/entity_reference_revisions": "^1.12"
+        "drupal/entity_reference_revisions": "^1.12",
+        "drupal/simple_oauth": "^6.1"
+    },
+    "suggest": {
+        "drupal/simple_oauth": "Accepts the [preview_token] URL token, for a frontend on another site."
     }
 }

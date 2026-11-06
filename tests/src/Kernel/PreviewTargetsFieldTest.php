@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\consumer_node_preview\Kernel;
 
 use Drupal\consumer_node_preview\Plugin\Field\FieldWidget\PreviewTargetWidget;
+use Drupal\consumer_node_preview\PreviewToken;
 use Drupal\consumers\Entity\Consumer;
 use Drupal\Core\Form\FormState;
 use Drupal\KernelTests\KernelTestBase;
@@ -337,12 +338,49 @@ class PreviewTargetsFieldTest extends KernelTestBase {
     $this->assertSame('Local', $element[0]['label']['#default_value']);
     $this->assertSame('http://localhost:3000/p', $element[0]['url']['#default_value']);
     $this->assertSame(2048, $element[0]['url']['#maxlength']);
-    foreach (['[jsonapi_node_preview]', '[jsonapi_node_preview_path]', '[uuid]', '[view_mode]', '[layout]'] as $token) {
+    foreach (['[jsonapi_node_preview]', '[jsonapi_node_preview_path]', '[uuid]', '[view_mode]', '[layout]', '[preview_token]'] as $token) {
       $this->assertStringContainsString($token, (string) $element[0]['url']['#description']);
+      $this->assertStringContainsString($token, (string) $consumer->get('preview_targets')->getFieldDefinition()->getDescription());
     }
     // The field has unlimited values, so an empty row follows the target.
     $this->assertSame('', $element[1]['label']['#default_value']);
     $this->assertSame('', $element[1]['url']['#default_value']);
+  }
+
+  /**
+   * Tests that the URL field lists the allowed hosts, when the site has some.
+   */
+  public function testWidgetListsAllowedHosts(): void {
+    $widget = $this->container->get('entity_display.repository')
+      ->getFormDisplay('consumer', 'consumer')
+      ->getRenderer('preview_targets');
+    $this->assertInstanceOf(PreviewTargetWidget::class, $widget);
+    $consumer = $this->createConsumer('App', []);
+    $description = function () use ($widget, $consumer): string {
+      $form = ['#parents' => []];
+      return (string) $widget->form($consumer->get('preview_targets'), $form, new FormState())['widget'][0]['url']['#description'];
+    };
+    $this->assertStringNotContainsString('Allowed hosts', $description());
+
+    $this->config('consumer_node_preview.settings')
+      ->set('allowed_target_hosts', ['www.example.com', '*.preview.example.com'])
+      ->save();
+    $this->assertStringContainsString('Allowed hosts: www.example.com, *.preview.example.com.', $description());
+  }
+
+  /**
+   * Tests that the consumer form groups the preview fields.
+   */
+  public function testConsumerFormGroupsPreviewFields(): void {
+    $consumer = $this->createConsumer('App', []);
+    $form = $this->container->get('entity.form_builder')->getForm($consumer);
+
+    $this->assertSame('details', $form['preview_settings']['#type']);
+    $this->assertSame('Preview settings', (string) $form['preview_settings']['#title']);
+    $this->assertFalse($form['preview_settings']['#open']);
+    foreach (['preview_targets', 'preview_layouts'] as $field) {
+      $this->assertSame('preview_settings', $form[$field]['#group']);
+    }
   }
 
   /**
@@ -363,6 +401,29 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   }
 
   /**
+   * Tests that a saved target leaves the picker when its host is not allowed.
+   *
+   * The allowed hosts can change after a target is saved. The preview must not
+   * send a token to a host the site no longer allows.
+   */
+  public function testStoredTargetOnHostNoLongerAllowed(): void {
+    $consumer = $this->createConsumer('App', [
+      ['label' => 'Old', 'url' => 'https://old.example.com/p'],
+      ['label' => 'Kept', 'url' => 'https://kept.example.com/p'],
+    ]);
+    $old = $consumer->id() . ':0';
+    $kept = $consumer->id() . ':1';
+    $this->assertNotNull($this->provider->getTargetByKey($old));
+
+    $this->config('consumer_node_preview.settings')
+      ->set('allowed_target_hosts', ['kept.example.com'])
+      ->save();
+    $this->assertSame([$kept], array_keys($this->provider->getAllTargets()));
+    $this->assertNull($this->provider->getTargetByKey($old));
+    $this->assertNotNull($this->provider->getTargetByKey($kept));
+  }
+
+  /**
    * Tests that a default naming an unpublished consumer's target falls back.
    *
    * It falls back to the first target in the picker.
@@ -378,6 +439,67 @@ class PreviewTargetsFieldTest extends KernelTestBase {
 
     $this->setSetting('consumer_node_preview', ['default' => $hidden->id() . ':0']);
     $this->assertSame($shown->id() . ':0', $this->provider->getDefaultKey());
+  }
+
+  /**
+   * Tests that only a URL that asks for a preview token gets one.
+   *
+   * The token is issued to the target's consumer. Without one, it is empty.
+   */
+  public function testResolveUrlCreatesTokenOnlyWhenAsked(): void {
+    $node = Node::create(['type' => 'article', 'title' => 'Test']);
+    $node->save();
+    $consumer = $this->createConsumer('App', []);
+    $tokens = $this->createMock(PreviewToken::class);
+    $tokens->expects($this->once())
+      ->method('create')
+      ->with($consumer)
+      ->willReturn('header.payload.signature');
+    $this->container->set('consumer_node_preview.preview_token', $tokens);
+    // Build the provider again, with the token service above.
+    $this->container->set('consumer_node_preview.targets_provider', NULL);
+    $provider = $this->container->get('consumer_node_preview.targets_provider');
+
+    $this->assertSame(
+      'https://preview.example.com/p#t=header.payload.signature',
+      $provider->resolveUrl('https://preview.example.com/p#t=[preview_token]', $node, 'full', '', $consumer),
+    );
+    // A URL without the token creates none, and nor does a URL without a
+    // consumer.
+    $provider->resolveUrl('https://preview.example.com/p#[uuid]', $node, 'full', '', $consumer);
+    $this->assertSame(
+      'https://preview.example.com/p#t=',
+      $provider->resolveUrl('https://preview.example.com/p#t=[preview_token]', $node, 'full'),
+    );
+  }
+
+  /**
+   * Tests that each target carries its consumer.
+   *
+   * A site target names one by its client ID, and has none without it.
+   */
+  public function testTargetsCarryTheirConsumer(): void {
+    $consumer = $this->createConsumer('App', [
+      ['label' => 'Live', 'url' => 'https://example.com/p'],
+    ]);
+    $this->setSetting('consumer_node_preview', [
+      'targets' => [
+        'named' => ['url' => 'https://named.example.com/p', 'consumer' => 'app'],
+        'unknown' => ['url' => 'https://unknown.example.com/p', 'consumer' => 'nope'],
+        'plain' => ['url' => 'https://plain.example.com/p'],
+      ],
+    ]);
+    $targets = $this->provider->getAllTargets();
+    $this->assertSame($consumer->id(), $targets[$consumer->id() . ':0']['consumer']?->id());
+    $this->assertSame($consumer->id(), $targets['settings:named']['consumer']?->id());
+    $this->assertNull($targets['settings:unknown']['consumer']);
+    $this->assertNull($targets['settings:plain']['consumer']);
+    $this->assertSame($consumer->id(), $this->provider->getTargetByKey($consumer->id() . ':0')['consumer']?->id());
+    $this->assertSame($consumer->id(), $this->provider->getTargetByKey('settings:named')['consumer']?->id());
+
+    // An unpublished consumer is not named.
+    $consumer->set('status', FALSE)->save();
+    $this->assertNull($this->provider->getTargetByKey('settings:named')['consumer']);
   }
 
   /**

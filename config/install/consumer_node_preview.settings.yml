@@ -1,0 +1,4 @@
+allowed_target_hosts: []
+token_lifetime: 900
+inactive_after: 86400
+delete_after: 2592000

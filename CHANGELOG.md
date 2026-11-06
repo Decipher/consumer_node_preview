@@ -10,10 +10,19 @@ and this project adheres to
 
 ### Added
 
+- A `[preview_token]` URL token: a short-lived Simple OAuth access token that
+  lets a frontend on another site, or on a tunnel, read node previews as their
+  editor. It needs Simple OAuth, which is optional.
+- An allowed target hosts setting that limits the hosts a preview target can
+  use. The consumer form lists the hosts under the URL field, and a saved
+  target on a host that is no longer allowed leaves the Frontend picker.
+- A Preview tab under Consumers for the allowed hosts, the token lifetime and
+  the expiry limits. settings.php can still pin each one with `$config`.
 - Preview targets on consumers: a label and a URL for each frontend that
   renders the consumer's node previews, edited on the consumer form.
 - Preview layouts on consumers: the layouts a frontend can render a preview
-  in, shown in a Layout select on the preview screen.
+  in, shown in a Layout select on the preview screen. Both fields are in a
+  collapsed Preview settings group on the consumer form.
 - Site targets in settings.php, for URLs that differ per environment, with an
   optional default target.
 - A tabbed preview screen. Core's Preview button opens a Frontend tab that
@@ -41,8 +50,8 @@ and this project adheres to
   other targets do not change.
 - Expiry for registered targets. A target that its frontend has not
   registered for a day moves to an Inactive targets group in the Frontend picker,
-  where it can still be picked. Cron deletes it after 30 days. The
-  `inactive_after` and `delete_after` settings change the two limits. Targets
+  where it can still be picked. Cron deletes it after 30 days. The Preview tab
+  changes the two limits. Targets
   added by hand never expire.
 - A check of each frontend from the editor's browser when the preview opens.
   A frontend that does not answer in 3 seconds shows "(not responding)" in

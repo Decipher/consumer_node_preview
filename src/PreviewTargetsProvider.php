@@ -6,6 +6,7 @@ namespace Drupal\consumer_node_preview;
 
 use Drupal\Component\Datetime\TimeInterface;
 use Drupal\consumers\Entity\ConsumerInterface;
+use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityFieldManagerInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Site\Settings;
@@ -31,10 +32,6 @@ use Symfony\Component\Routing\Exception\RouteNotFoundException;
  *     ],
  *   ],
  *   'default' => 'settings:frontend',
- *   // Seconds after its last registration that a target goes inactive.
- *   'inactive_after' => 86400,
- *   // Seconds after its last registration that cron deletes a target.
- *   'delete_after' => 2592000,
  * ];
  * @endcode
  */
@@ -50,6 +47,8 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     protected ResourceTypeRepositoryInterface $resourceTypeRepository,
     protected EntityFieldManagerInterface $entityFieldManager,
     protected TimeInterface $time,
+    protected PreviewToken $previewToken,
+    protected ConfigFactoryInterface $configFactory,
   ) {}
 
   /**
@@ -110,11 +109,16 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
       foreach ($consumer->get('preview_targets') as $delta => $item) {
         $last_seen = $item->get('last_seen')->getValue();
         $last_seen = $last_seen === NULL ? NULL : (int) $last_seen;
+        $url = (string) $item->get('url')->getValue();
+        if (!$this->allowsStoredUrl($url)) {
+          continue;
+        }
         $label = (string) $item->get('label')->getValue();
         $target = [
           'label' => $consumer->label() . ': ' . $label,
-          'url' => (string) $item->get('url')->getValue(),
+          'url' => $url,
           'layouts' => $layouts,
+          'consumer' => $consumer,
           'group' => (string) $consumer->label(),
           'option_label' => $label,
           'last_seen' => $last_seen,
@@ -184,7 +188,10 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
       return NULL;
     }
     $target = $this->getTargets($consumer)[(int) $matches[2]] ?? NULL;
-    return $target === NULL ? NULL : $target + ['layouts' => $this->getLayouts($consumer)];
+    if ($target === NULL || !$this->allowsStoredUrl($target['url'])) {
+      return NULL;
+    }
+    return $target + ['layouts' => $this->getLayouts($consumer), 'consumer' => $consumer];
   }
 
   /**
@@ -268,12 +275,17 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
   /**
    * {@inheritdoc}
    */
-  public function resolveUrl(string $url, NodeInterface $node_preview, string $view_mode_id, string $layout = ''): string {
+  public function resolveUrl(string $url, NodeInterface $node_preview, string $view_mode_id, string $layout = '', ?ConsumerInterface $consumer = NULL): string {
     $replacements = [
       '[uuid]' => rawurlencode((string) $node_preview->uuid()),
       '[view_mode]' => rawurlencode($view_mode_id),
       '[layout]' => rawurlencode($layout),
     ];
+    // Only a URL that asks for one gets a token, so a frontend that reads the
+    // preview with the editor's session never holds one.
+    if (str_contains($url, '[preview_token]')) {
+      $replacements['[preview_token]'] = $consumer ? $this->previewToken->create($consumer) : '';
+    }
     // Without an endpoint, the endpoint tokens stay as they are. A visible
     // token is easier to debug than an empty fragment.
     $endpoint = $this->getEndpoint($node_preview);
@@ -327,25 +339,73 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
   }
 
   /**
-   * Returns a number of seconds from settings.php, or its default.
+   * {@inheritdoc}
+   */
+  public function getAllowedHosts(): array {
+    $hosts = $this->configFactory->get('consumer_node_preview.settings')->get('allowed_target_hosts');
+    return is_array($hosts) ? array_values(array_map(
+      fn(mixed $host): string => strtolower((string) $host),
+      $hosts,
+    )) : [];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function isAllowedHost(string $host): bool {
+    $allowed = $this->getAllowedHosts();
+    if (!$allowed) {
+      return TRUE;
+    }
+    foreach ($allowed as $pattern) {
+      if ($host === $pattern) {
+        return TRUE;
+      }
+      if (str_starts_with($pattern, '*.') && str_ends_with($host, substr($pattern, 1)) && strlen($host) > strlen($pattern) - 1) {
+        return TRUE;
+      }
+    }
+    return FALSE;
+  }
+
+  /**
+   * Whether a saved target's URL is on a host the site still allows.
+   *
+   * The allowed hosts can change after a target is saved. A target outside
+   * them must not get a preview token.
+   *
+   * @param string $url
+   *   The target's URL template.
+   */
+  protected function allowsStoredUrl(string $url): bool {
+    if (!$this->getAllowedHosts()) {
+      return TRUE;
+    }
+    $host = parse_url($url, PHP_URL_HOST);
+    return is_string($host) && !str_contains($url, '\\') && $this->isAllowedHost(strtolower($host));
+  }
+
+  /**
+   * Returns a number of seconds from the module's settings, or its default.
    *
    * @param string $name
-   *   The key in $settings['consumer_node_preview'].
+   *   The key in consumer_node_preview.settings.
    * @param int $default
    *   The value when the setting is missing, or is not a whole number above
    *   zero.
    */
   protected function secondsSetting(string $name, int $default): int {
-    $value = Settings::get('consumer_node_preview', [])[$name] ?? NULL;
+    $value = $this->configFactory->get('consumer_node_preview.settings')->get($name);
     return is_int($value) && $value > 0 ? $value : $default;
   }
 
   /**
    * Returns the site's targets from settings.php.
    *
-   * @return array<string, array{label: string, url: string, layouts: list<string>}>
+   * @return array<string, array{label: string, url: string, layouts: list<string>, consumer: \Drupal\consumers\Entity\ConsumerInterface|null}>
    *   The targets that have a URL, keyed by name. A layout with a name
-   *   that does not match the pattern is left out.
+   *   that does not match the pattern is left out. The consumer is the one
+   *   whose client ID the target names, if it is published.
    */
   protected function getSiteTargets(): array {
     $targets = [];
@@ -360,10 +420,26 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
           'label' => (string) ($target['label'] ?? $name),
           'url' => $url,
           'layouts' => array_values(array_unique($layouts)),
+          'consumer' => is_string($target['consumer'] ?? NULL) ? $this->loadConsumer($target['consumer']) : NULL,
         ];
       }
     }
     return $targets;
+  }
+
+  /**
+   * Loads a published consumer by its client ID.
+   *
+   * @param string $client_id
+   *   The client ID.
+   */
+  protected function loadConsumer(string $client_id): ?ConsumerInterface {
+    $consumers = $this->entityTypeManager->getStorage('consumer')->loadByProperties([
+      'client_id' => $client_id,
+      'status' => 1,
+    ]);
+    $consumer = reset($consumers);
+    return $consumer instanceof ConsumerInterface ? $consumer : NULL;
   }
 
 }

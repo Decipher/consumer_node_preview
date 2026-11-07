@@ -81,6 +81,16 @@ phpstan (previous major):
 stylelint:
   allow_failure: false
 
+# Simple OAuth, which the tests use, needs PHP 8.2 or later and sodium. The
+# Drupal 10 jobs default to PHP 8.1 on the Debian image, which has no sodium,
+# so use the Ubuntu image the current major runs on. CORE_PREVIOUS_PHP_MIN is a
+# CI/CD settings variable, so a value under variables: above does nothing. The
+# other Drupal 10 jobs take both values from this job's build.env.
+composer (previous major):
+  variables:
+    PHP_VERSION: '8.3'
+    PHP_IMAGE_VARIANT: 'ubuntu-apache'
+
 # Drupal 10 runs PHPUnit 9, which needs a configuration in its own format.
 # Its test bootstrap changes directory into web/, and PHPUnit 9 then reads the
 # configuration file again from there, so the path must be absolute.

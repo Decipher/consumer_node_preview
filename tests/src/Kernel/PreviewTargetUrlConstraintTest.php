@@ -113,6 +113,7 @@ class PreviewTargetUrlConstraintTest extends KernelTestBase {
     $this->assertFalse($check('https://user@example.com/p'));
     $this->assertFalse($check('https://example.com[jsonapi_node_preview]/p'));
     $this->assertFalse($check('https://example.com[jsonapi_node_preview_path]/p'));
+    $this->assertFalse($check('https://x[token2].example.com/p'), 'Any name in square brackets counts.');
     $this->assertTrue($check('http://[::1]:3000/p#[jsonapi_node_preview_path]'), 'An IPv6 host is not a token.');
     $this->assertTrue($check('http://localhost:3000/p@x#[jsonapi_node_preview_path]'), 'An @ in the path is fine.');
 
@@ -141,8 +142,18 @@ class PreviewTargetUrlConstraintTest extends KernelTestBase {
     $validator = PreviewTargetUrlConstraintValidator::create($this->container);
     $validator->initialize($context);
     $validator->validate('https://user:pass@x.example.com/p', $constraint);
+    // PHP finds no host in these, but the host part is still the reason.
+    $validator->validate('https://x.example.com:[uuid]/p', $constraint);
+    $validator->validate('https:\\\\evil.test[uuid]@x.example.com/p', $constraint);
+    $validator->validate('https://x[node:nid].example.com/p', $constraint);
     $validator->validate('ftp://x.example.com/p', $constraint);
-    $this->assertSame([$constraint->authorityMessage, $constraint->message], $messages);
+    $this->assertSame([
+      $constraint->authorityMessage,
+      $constraint->authorityMessage,
+      $constraint->authorityMessage,
+      $constraint->authorityMessage,
+      $constraint->message,
+    ], $messages);
   }
 
 }

@@ -389,9 +389,9 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     if (!preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//([^/?\#]*)#i', $url, $matches)) {
       return TRUE;
     }
-    // A user name ends at "@". A token is a name in square brackets, unlike
-    // an IPv6 address, which holds colons.
-    return !str_contains($matches[1], '@') && !preg_match('/\[[a-z_]+\]/i', $matches[1]);
+    // A user name ends at "@". A token is anything in square brackets other
+    // than an IPv6 address, which holds only hex digits, colons and dots.
+    return !str_contains($matches[1], '@') && !preg_match('/\[(?![0-9a-f:.]*\])[^\]]*\]/i', $matches[1]);
   }
 
   /**

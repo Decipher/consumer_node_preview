@@ -43,6 +43,12 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
     if (!is_string($value) || trim($value) === '') {
       return;
     }
+    // A user name or a token in the host part fails first, with its own
+    // message. PHP finds no host in some of these, but this is the reason.
+    if (!$this->targetsProvider->hasPlainAuthority($value)) {
+      $this->context->addViolation($constraint->authorityMessage, ['%url' => $value]);
+      return;
+    }
     // The value as stored. A leading space would break the URL in the frame,
     // so it fails here. The form and the endpoint trim before they save.
     $parts = parse_url($value);
@@ -56,10 +62,6 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
     $scheme = strtolower($parts['scheme'] ?? '');
     if (empty($parts['host']) || !in_array($scheme, ['http', 'https'], TRUE)) {
       $this->context->addViolation($constraint->message, ['%url' => $value]);
-      return;
-    }
-    if (!$this->targetsProvider->hasPlainAuthority($value)) {
-      $this->context->addViolation($constraint->authorityMessage, ['%url' => $value]);
       return;
     }
     if (!$this->targetsProvider->isAllowedHost(strtolower($parts['host'])) && !$this->isStored($value)) {

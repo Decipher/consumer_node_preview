@@ -15,6 +15,7 @@ use Drupal\Core\Url;
 use Drupal\jsonapi\ResourceType\ResourceType;
 use Drupal\jsonapi\ResourceType\ResourceTypeRepositoryInterface;
 use Drupal\node\NodeInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Routing\Exception\RouteNotFoundException;
 
 /**
@@ -42,6 +43,13 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
    */
   protected const INCLUDE_DEPTH = 3;
 
+  /**
+   * The settings.php targets already logged as left out, keyed by name.
+   *
+   * @var array<string, true>
+   */
+  protected array $leftOut = [];
+
   public function __construct(
     protected EntityTypeManagerInterface $entityTypeManager,
     protected ResourceTypeRepositoryInterface $resourceTypeRepository,
@@ -49,6 +57,7 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     protected TimeInterface $time,
     protected PreviewToken $previewToken,
     protected ConfigFactoryInterface $configFactory,
+    protected ?LoggerInterface $logger = NULL,
   ) {}
 
   /**
@@ -431,7 +440,16 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     $targets = [];
     foreach (Settings::get('consumer_node_preview', [])['targets'] ?? [] as $name => $target) {
       $url = trim((string) ($target['url'] ?? ''));
-      if ($url !== '' && $this->hasPlainAuthority($url)) {
+      if ($url !== '' && !$this->hasPlainAuthority($url)) {
+        // The URL check never sees settings.php, so say why the target is
+        // gone. Once per request is enough.
+        if (!isset($this->leftOut[$name])) {
+          $this->leftOut[$name] = TRUE;
+          $this->logger?->warning('Left out the settings.php preview target @name: its URL has a user name or a token before the path.', ['@name' => $name]);
+        }
+        continue;
+      }
+      if ($url !== '') {
         $layouts = array_filter(
           (array) ($target['layouts'] ?? []),
           fn(mixed $layout): bool => is_string($layout) && preg_match(self::LAYOUT_PATTERN, $layout) === 1,

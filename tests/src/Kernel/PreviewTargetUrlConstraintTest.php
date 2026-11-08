@@ -128,4 +128,21 @@ class PreviewTargetUrlConstraintTest extends KernelTestBase {
     $this->assertTrue($provider->hasPlainAuthority(' /node/preview#[jsonapi_node_preview_path]'));
   }
 
+  /**
+   * Tests that a user name or token in the host part has its own message.
+   */
+  public function testAuthorityMessage(): void {
+    $context = $this->createMock(ExecutionContextInterface::class);
+    $messages = [];
+    $context->method('addViolation')->willReturnCallback(function (string $message) use (&$messages): void {
+      $messages[] = $message;
+    });
+    $constraint = new PreviewTargetUrlConstraint();
+    $validator = PreviewTargetUrlConstraintValidator::create($this->container);
+    $validator->initialize($context);
+    $validator->validate('https://user:pass@x.example.com/p', $constraint);
+    $validator->validate('ftp://x.example.com/p', $constraint);
+    $this->assertSame([$constraint->authorityMessage, $constraint->message], $messages);
+  }
+
 }

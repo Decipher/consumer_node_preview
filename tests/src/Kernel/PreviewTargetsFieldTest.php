@@ -6,6 +6,9 @@ namespace Drupal\Tests\consumer_node_preview\Kernel;
 
 use Drupal\consumer_node_preview\Plugin\Field\FieldWidget\PreviewTargetWidget;
 use Drupal\consumer_node_preview\PreviewToken;
+use Drupal\Core\Logger\RfcLoggerTrait;
+use Drupal\Core\Logger\RfcLogLevel;
+use Psr\Log\LoggerInterface;
 use Drupal\consumers\Entity\Consumer;
 use Drupal\Core\Form\FormState;
 use Drupal\KernelTests\KernelTestBase;
@@ -450,8 +453,29 @@ class PreviewTargetsFieldTest extends KernelTestBase {
         'kept' => ['label' => 'Kept', 'url' => 'https://x.example.com/p#[jsonapi_node_preview_path]'],
       ],
     ]);
+    $logger = new class() implements LoggerInterface {
+      use RfcLoggerTrait;
+
+      /**
+       * The entries logged, as the level and the message.
+       *
+       * @var list<array{mixed, string}>
+       */
+      public array $logged = [];
+
+      /**
+       * {@inheritdoc}
+       */
+      public function log($level, string|\Stringable $message, array $context = []): void {
+        $this->logged[] = [$level, strtr((string) $message, $context)];
+      }
+
+    };
+    $this->container->get('logger.factory')->addLogger($logger);
+
     $this->assertSame(['settings:kept'], array_keys($this->provider->getAllTargets()));
     $this->assertNull($this->provider->getTargetByKey('settings:moved'));
+    $this->assertSame([[RfcLogLevel::WARNING, 'Left out the settings.php preview target moved: its URL has a user name or a token before the path.']], $logger->logged, 'It is logged once per request.');
   }
 
   /**

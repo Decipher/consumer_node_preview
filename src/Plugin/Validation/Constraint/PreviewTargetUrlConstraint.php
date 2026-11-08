@@ -30,6 +30,7 @@ class PreviewTargetUrlConstraint extends SymfonyConstraint {
     mixed $payload = NULL,
     // Last, so callers that pass the other arguments by position still work.
     public string $hostMessage = 'The preview target host %host is not allowed on this site.',
+    public string $authorityMessage = 'The URL %url has a user name or a token before its path. Put the tokens in the path, query or fragment.',
   ) {
     parent::__construct($options, $groups, $payload);
   }

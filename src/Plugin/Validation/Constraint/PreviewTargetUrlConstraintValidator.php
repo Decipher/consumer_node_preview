@@ -54,8 +54,12 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
       return;
     }
     $scheme = strtolower($parts['scheme'] ?? '');
-    if (empty($parts['host']) || !in_array($scheme, ['http', 'https'], TRUE) || !$this->targetsProvider->hasPlainAuthority($value)) {
+    if (empty($parts['host']) || !in_array($scheme, ['http', 'https'], TRUE)) {
       $this->context->addViolation($constraint->message, ['%url' => $value]);
+      return;
+    }
+    if (!$this->targetsProvider->hasPlainAuthority($value)) {
+      $this->context->addViolation($constraint->authorityMessage, ['%url' => $value]);
       return;
     }
     if (!$this->targetsProvider->isAllowedHost(strtolower($parts['host'])) && !$this->isStored($value)) {

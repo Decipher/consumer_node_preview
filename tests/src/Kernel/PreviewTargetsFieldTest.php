@@ -424,6 +424,23 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   }
 
   /**
+   * Tests that a saved target with tokens in its host part leaves the picker.
+   *
+   * A target saved before the URL check refused it must not get a token.
+   */
+  public function testStoredTargetWithTokensInItsHostLeavesThePicker(): void {
+    $consumer = $this->createConsumer('App', [
+      ['label' => 'Moved', 'url' => 'https://evil.test[jsonapi_node_preview_path]:[preview_token]@x.preview.example.com/'],
+      ['label' => 'Kept', 'url' => 'https://x.preview.example.com/p#[jsonapi_node_preview];token=[preview_token]'],
+    ]);
+    $this->config('consumer_node_preview.settings')
+      ->set('allowed_target_hosts', ['*.preview.example.com'])
+      ->save();
+    $this->assertSame([$consumer->id() . ':1'], array_keys($this->provider->getAllTargets()));
+    $this->assertNull($this->provider->getTargetByKey($consumer->id() . ':0'));
+  }
+
+  /**
    * Tests that a default naming an unpublished consumer's target falls back.
    *
    * It falls back to the first target in the picker.

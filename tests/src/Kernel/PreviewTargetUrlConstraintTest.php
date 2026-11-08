@@ -83,6 +83,41 @@ class PreviewTargetUrlConstraintTest extends KernelTestBase {
     $this->assertFalse($check('https://evilpreview.example.com/p'));
     $this->assertFalse($check('https://a.preview.example.com.evil.test/p'));
     $this->assertFalse($check('https://evil.test\\@example.com/p'));
+
+    // PHP reads the host before the tokens go in. A token or a user name
+    // there could move the host elsewhere once the tokens are filled in.
+    $this->assertFalse($check('https://evil.test[jsonapi_node_preview_path]:[preview_token]@x.preview.example.com/'));
+    $this->assertFalse($check('https://user:pass@x.preview.example.com/p'));
+    $this->assertFalse($check('https://x.preview.example.com:[uuid]/p'));
+    $this->assertFalse($check('https://x[layout].preview.example.com/p'));
+    $this->assertTrue($check('https://x.preview.example.com/p?vm=[view_mode]&layout=[layout]#[jsonapi_node_preview];token=[preview_token]'));
+  }
+
+  /**
+   * Tests that the URL's host part takes no user name and no tokens.
+   *
+   * It holds without the allowlist too, so a URL never moves its host.
+   */
+  public function testAuthorityIsPlain(): void {
+    $check = function (string $url): bool {
+      $context = $this->createMock(ExecutionContextInterface::class);
+      $violations = 0;
+      $context->method('addViolation')->willReturnCallback(function () use (&$violations): void {
+        $violations++;
+      });
+      $validator = PreviewTargetUrlConstraintValidator::create($this->container);
+      $validator->initialize($context);
+      $validator->validate($url, new PreviewTargetUrlConstraint());
+      return $violations === 0;
+    };
+    $this->assertFalse($check('https://user@example.com/p'));
+    $this->assertFalse($check('https://example.com[jsonapi_node_preview]/p'));
+    $this->assertTrue($check('http://[::1]:3000/p#[jsonapi_node_preview_path]'), 'An IPv6 host is not a token.');
+    $this->assertTrue($check('http://localhost:3000/p@x#[jsonapi_node_preview_path]'), 'An @ in the path is fine.');
+
+    $provider = $this->container->get('consumer_node_preview.targets_provider');
+    $this->assertTrue($provider->hasPlainAuthority('/node/preview?vm=[view_mode]#[jsonapi_node_preview_path]'), 'A path has no host part.');
+    $this->assertFalse($provider->hasPlainAuthority('//evil.test[uuid]@example.com/p'), 'A URL without a scheme still has a host part.');
   }
 
 }

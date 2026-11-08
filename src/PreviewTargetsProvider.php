@@ -369,6 +369,19 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
   }
 
   /**
+   * {@inheritdoc}
+   */
+  public function hasPlainAuthority(string $url): bool {
+    // A path, such as a settings.php target's, has no host part.
+    if (!preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//([^/?\#]*)#i', $url, $matches)) {
+      return TRUE;
+    }
+    // A user name ends at "@". A token is a name in square brackets, unlike
+    // an IPv6 address, which holds colons.
+    return !str_contains($matches[1], '@') && !preg_match('/\[[a-z_]+\]/i', $matches[1]);
+  }
+
+  /**
    * Whether a saved target's URL is on a host the site still allows.
    *
    * The allowed hosts can change after a target is saved. A target outside
@@ -378,6 +391,9 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
    *   The target's URL template.
    */
   protected function allowsStoredUrl(string $url): bool {
+    if (!$this->hasPlainAuthority($url)) {
+      return FALSE;
+    }
     if (!$this->getAllowedHosts()) {
       return TRUE;
     }

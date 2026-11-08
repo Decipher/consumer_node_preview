@@ -54,7 +54,7 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
       return;
     }
     $scheme = strtolower($parts['scheme'] ?? '');
-    if (empty($parts['host']) || !in_array($scheme, ['http', 'https'], TRUE)) {
+    if (empty($parts['host']) || !in_array($scheme, ['http', 'https'], TRUE) || !$this->targetsProvider->hasPlainAuthority($value)) {
       $this->context->addViolation($constraint->message, ['%url' => $value]);
       return;
     }

@@ -112,12 +112,20 @@ class PreviewTargetUrlConstraintTest extends KernelTestBase {
     };
     $this->assertFalse($check('https://user@example.com/p'));
     $this->assertFalse($check('https://example.com[jsonapi_node_preview]/p'));
+    $this->assertFalse($check('https://example.com[jsonapi_node_preview_path]/p'));
     $this->assertTrue($check('http://[::1]:3000/p#[jsonapi_node_preview_path]'), 'An IPv6 host is not a token.');
     $this->assertTrue($check('http://localhost:3000/p@x#[jsonapi_node_preview_path]'), 'An @ in the path is fine.');
 
     $provider = $this->container->get('consumer_node_preview.targets_provider');
     $this->assertTrue($provider->hasPlainAuthority('/node/preview?vm=[view_mode]#[jsonapi_node_preview_path]'), 'A path has no host part.');
     $this->assertFalse($provider->hasPlainAuthority('//evil.test[uuid]@example.com/p'), 'A URL without a scheme still has a host part.');
+    // A browser drops leading spaces and control characters, removes tabs
+    // and line breaks, and reads a backslash as a slash.
+    $this->assertFalse($provider->hasPlainAuthority(' https://evil.test[jsonapi_node_preview_path]:[preview_token]@x.preview.example.com/'));
+    $this->assertFalse($provider->hasPlainAuthority("\x01https://evil.test[uuid]@example.com/p"));
+    $this->assertFalse($provider->hasPlainAuthority("https://evil.te\tst[uuid]@example.com/p"));
+    $this->assertFalse($provider->hasPlainAuthority('https:\\\\evil.test[uuid]@example.com/p'));
+    $this->assertTrue($provider->hasPlainAuthority(' /node/preview#[jsonapi_node_preview_path]'));
   }
 
 }

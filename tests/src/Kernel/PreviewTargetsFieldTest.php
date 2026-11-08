@@ -441,6 +441,20 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   }
 
   /**
+   * Tests that a settings.php target with tokens in its host part is left out.
+   */
+  public function testSiteTargetWithTokensInItsHostIsLeftOut(): void {
+    $this->setSetting('consumer_node_preview', [
+      'targets' => [
+        'moved' => ['label' => 'Moved', 'url' => 'https://evil.test[jsonapi_node_preview_path]:[preview_token]@x.example.com/'],
+        'kept' => ['label' => 'Kept', 'url' => 'https://x.example.com/p#[jsonapi_node_preview_path]'],
+      ],
+    ]);
+    $this->assertSame(['settings:kept'], array_keys($this->provider->getAllTargets()));
+    $this->assertNull($this->provider->getTargetByKey('settings:moved'));
+  }
+
+  /**
    * Tests that a default naming an unpublished consumer's target falls back.
    *
    * It falls back to the first target in the picker.

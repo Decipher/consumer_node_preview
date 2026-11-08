@@ -372,6 +372,10 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
    * {@inheritdoc}
    */
   public function hasPlainAuthority(string $url): bool {
+    // Read the URL as a browser does. It drops leading and trailing spaces and
+    // control characters, removes tabs and line breaks, and reads a backslash
+    // as a slash.
+    $url = str_replace(["\t", "\n", "\r", '\\'], ['', '', '', '/'], trim($url, "\x00..\x20"));
     // A path, such as a settings.php target's, has no host part.
     if (!preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//([^/?\#]*)#i', $url, $matches)) {
       return TRUE;
@@ -427,7 +431,7 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     $targets = [];
     foreach (Settings::get('consumer_node_preview', [])['targets'] ?? [] as $name => $target) {
       $url = trim((string) ($target['url'] ?? ''));
-      if ($url !== '') {
+      if ($url !== '' && $this->hasPlainAuthority($url)) {
         $layouts = array_filter(
           (array) ($target['layouts'] ?? []),
           fn(mixed $layout): bool => is_string($layout) && preg_match(self::LAYOUT_PATTERN, $layout) === 1,

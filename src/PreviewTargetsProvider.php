@@ -385,8 +385,10 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     // control characters, removes tabs and line breaks, and reads a backslash
     // as a slash.
     $url = str_replace(["\t", "\n", "\r", '\\'], ['', '', '', '/'], trim($url, "\x00..\x20"));
-    // A path, such as a settings.php target's, has no host part.
-    if (!preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//([^/?\#]*)#i', $url, $matches)) {
+    // For http and https, a browser reads any number of slashes after the
+    // scheme, even none, as the start of the host part. Other URLs have one
+    // only after "//". A path, such as a settings.php target's, has none.
+    if (!preg_match('#^https?:/*([^/?\#]*)#i', $url, $matches) && !preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//([^/?\#]*)#i', $url, $matches)) {
       return TRUE;
     }
     // A user name ends at "@". A token is anything in square brackets other

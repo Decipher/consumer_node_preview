@@ -127,6 +127,10 @@ class PreviewTargetUrlConstraintTest extends KernelTestBase {
     $this->assertFalse($provider->hasPlainAuthority("https://evil.te\tst[uuid]@example.com/p"));
     $this->assertFalse($provider->hasPlainAuthority('https:\\\\evil.test[uuid]@example.com/p'));
     $this->assertTrue($provider->hasPlainAuthority(' /node/preview#[jsonapi_node_preview_path]'));
+    // A browser reads any number of slashes after the scheme as two.
+    $this->assertFalse($provider->hasPlainAuthority('https:////evil.test[jsonapi_node_preview_path]:[preview_token]@x.example.com/'));
+    $this->assertFalse($provider->hasPlainAuthority('https:/evil.test[uuid]@x.example.com/'));
+    $this->assertFalse($provider->hasPlainAuthority('https:evil.test[uuid]@x.example.com/'));
   }
 
   /**

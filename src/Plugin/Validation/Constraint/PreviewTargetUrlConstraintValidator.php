@@ -74,11 +74,13 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
   }
 
   /**
-   * Checks whether the consumer already has this URL saved.
+   * Checks whether the consumer already has this target saved.
    *
    * A saved target on a host taken off the allowlist stays out of the
    * Frontend picker. Keeping it must not stop the consumer saving, or one
-   * frontend's old target would block another frontend's registration.
+   * frontend's old target would block another frontend's registration. Only
+   * the same target counts, by its label and URL, so a new target can't copy
+   * an old target's URL past the checks.
    *
    * @param string $url
    *   The URL being validated.
@@ -94,8 +96,13 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
     if (!$stored instanceof ContentEntityInterface) {
       return FALSE;
     }
-    $urls = array_column($stored->get($item->getFieldDefinition()->getName())->getValue(), 'url');
-    return in_array($url, $urls, TRUE);
+    $label = (string) $item->get('label')->getValue();
+    foreach ($stored->get($item->getFieldDefinition()->getName())->getValue() as $saved) {
+      if (($saved['url'] ?? NULL) === $url && (string) ($saved['label'] ?? '') === $label) {
+        return TRUE;
+      }
+    }
+    return FALSE;
   }
 
 }

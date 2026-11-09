@@ -462,9 +462,10 @@ class PreviewTargetsFieldTest extends KernelTestBase {
     $consumer->save();
     $this->assertSame([$consumer->id() . ':1'], array_keys($this->provider->getAllTargets()));
 
-    // A new target with a user name is still refused.
+    // A new target with a user name is still refused, even with the old URL.
     $consumer->get('preview_targets')->appendItem(['label' => 'Bad', 'url' => 'https://user@bad.example.com/p']);
-    $this->assertSame(['preview_targets.2.url'], $paths());
+    $consumer->get('preview_targets')->appendItem(['label' => 'Copy', 'url' => 'https://user:pass@old.example.com/p']);
+    $this->assertSame(['preview_targets.2.url', 'preview_targets.3.url'], $paths());
   }
 
   /**

@@ -396,13 +396,12 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     if (str_contains($matches[1], '@')) {
       return FALSE;
     }
-    preg_match_all('/\[([^\]]*)\]/', $matches[1], $brackets);
-    foreach ($brackets[1] as $inside) {
-      if (filter_var($inside, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) === FALSE) {
-        return FALSE;
-      }
+    if (strpbrk($matches[1], '[]') === FALSE) {
+      return TRUE;
     }
-    return TRUE;
+    // A bracketed host part is one IPv6 address, then an optional port.
+    return preg_match('/^\[([^\[\]]+)\](?::\d*)?$/', $matches[1], $address) === 1
+      && filter_var($address[1], FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== FALSE;
   }
 
   /**

@@ -444,6 +444,29 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   }
 
   /**
+   * Tests that a saved target with a user name doesn't block other targets.
+   *
+   * It stays out of the picker, but the consumer can still save new targets.
+   */
+  public function testStoredTargetWithUserNameStillSaves(): void {
+    $consumer = $this->createConsumer('App', [
+      ['label' => 'Old', 'url' => 'https://user:pass@old.example.com/p'],
+    ]);
+    $paths = fn(): array => array_map(
+      fn($violation): string => $violation->getPropertyPath(),
+      iterator_to_array($consumer->validate()->getByField('preview_targets')),
+    );
+    $consumer->get('preview_targets')->appendItem(['label' => 'New', 'url' => 'https://new.example.com/p']);
+    $this->assertSame([], $paths());
+    $consumer->save();
+    $this->assertSame([$consumer->id() . ':1'], array_keys($this->provider->getAllTargets()));
+
+    // A new target with a user name is still refused.
+    $consumer->get('preview_targets')->appendItem(['label' => 'Bad', 'url' => 'https://user@bad.example.com/p']);
+    $this->assertSame(['preview_targets.2.url'], $paths());
+  }
+
+  /**
    * Tests that a settings.php target with tokens in its host part is left out.
    */
   public function testSiteTargetWithTokensInItsHostIsLeftOut(): void {

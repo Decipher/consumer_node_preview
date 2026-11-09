@@ -115,6 +115,8 @@ class PreviewTargetUrlConstraintTest extends KernelTestBase {
     $this->assertFalse($check('https://example.com[jsonapi_node_preview_path]/p'));
     $this->assertFalse($check('https://x[token2].example.com/p'), 'Any name in square brackets counts.');
     $this->assertTrue($check('http://[::1]:3000/p#[jsonapi_node_preview_path]'), 'An IPv6 host is not a token.');
+    $this->assertFalse($check('https://[face]/p'), 'Brackets must hold an IPv6 address.');
+    $this->assertTrue($check('https://[2001:db8::1]:8443/p'));
     $this->assertTrue($check('http://localhost:3000/p@x#[jsonapi_node_preview_path]'), 'An @ in the path is fine.');
 
     $provider = $this->container->get('consumer_node_preview.targets_provider');

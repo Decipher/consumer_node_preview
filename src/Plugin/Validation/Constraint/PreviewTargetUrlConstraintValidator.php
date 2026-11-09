@@ -46,7 +46,11 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
     // A user name or a token in the host part fails first, with its own
     // message. PHP finds no host in some of these, but this is the reason.
     if (!$this->targetsProvider->hasPlainAuthority($value)) {
-      $this->context->addViolation($constraint->authorityMessage, ['%url' => $value]);
+      // A target saved before this check can stay, so it doesn't block the
+      // consumer's other targets. It stays out of the picker.
+      if (!$this->isStored($value)) {
+        $this->context->addViolation($constraint->authorityMessage, ['%url' => $value]);
+      }
       return;
     }
     // The value as stored. A leading space would break the URL in the frame,

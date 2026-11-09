@@ -17,6 +17,7 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Drupal\node\Entity\Node;
 use Drupal\node\Entity\NodeType;
 use Symfony\Component\Validator\ConstraintViolation;
+use Symfony\Component\Validator\ConstraintViolationInterface;
 use Symfony\Component\Validator\ConstraintViolationListInterface;
 
 /**
@@ -453,7 +454,7 @@ class PreviewTargetsFieldTest extends KernelTestBase {
       ['label' => 'Old', 'url' => 'https://user:pass@old.example.com/p'],
     ]);
     $paths = fn(): array => array_map(
-      fn($violation): string => $violation->getPropertyPath(),
+      fn(ConstraintViolationInterface $violation): string => $violation->getPropertyPath(),
       iterator_to_array($consumer->validate()->getByField('preview_targets')),
     );
     $consumer->get('preview_targets')->appendItem(['label' => 'New', 'url' => 'https://new.example.com/p']);

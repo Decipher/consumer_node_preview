@@ -113,8 +113,9 @@ interface PreviewTargetsProviderInterface {
    * @param string $key
    *   A key in the form "settings:<name>" or "<consumer id>:<delta>".
    *
-   * @return array{label: string, url: string, layouts: list<string>, consumer: \Drupal\consumers\Entity\ConsumerInterface|null}|null
-   *   The target, or NULL when the key does not resolve.
+   * @return array{label: string, url: string, expires: int|null, layouts: list<string>, consumer: \Drupal\consumers\Entity\ConsumerInterface|null}|null
+   *   The target, or NULL when the key does not resolve. A site target's
+   *   expires is always NULL.
    */
   public function getTargetByKey(string $key): ?array;
 

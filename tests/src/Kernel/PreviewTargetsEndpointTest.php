@@ -758,7 +758,7 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
   /**
    * Tests that an expires_in that is not a whole number above zero fails.
    */
-  public function testRegisterRefusesABadExpiresIn(): void {
+  public function testRegisterRefusesAnInvalidExpiresIn(): void {
     $this->setCurrentUser($this->owner);
     $target = ['label' => 'Tunnel', 'url' => 'https://tunnel.example.com/p'];
     foreach (['120', 0, -1, 1.5, TRUE, []] as $expires_in) {
@@ -799,7 +799,7 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
     $this->setCurrentUser($this->owner);
     foreach ([NULL, [], ['target' => 'Local'], ['target' => []], ['target' => ['label' => 1]]] as $payload) {
       $response = $this->call('DELETE', $payload, $this->consumer->uuid());
-      $this->assertSame(422, $response->getStatusCode(), json_encode($payload));
+      $this->assertSame(422, $response->getStatusCode(), (string) json_encode($payload));
     }
     $this->assertSame(['Local'], array_column($this->storedTargets(), 'label'));
   }

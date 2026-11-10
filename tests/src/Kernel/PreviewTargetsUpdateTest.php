@@ -6,6 +6,7 @@ namespace Drupal\Tests\consumer_node_preview\Kernel;
 
 use Drupal\consumers\Entity\Consumer;
 use Drupal\KernelTests\KernelTestBase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -53,7 +54,7 @@ class PreviewTargetsUpdateTest extends KernelTestBase {
   /**
    * Tests that the update changes nothing on a site that has the columns.
    */
-  public function testTheUpdateLeavesACurrentSiteAlone(): void {
+  public function testTheUpdateLeavesAnUpToDateSiteAlone(): void {
     $this->assertSame([], $this->pendingChanges());
     $this->assertSame('The preview targets columns are already in place.', consumer_node_preview_update_10001());
     $this->assertSame([], $this->pendingChanges());
@@ -66,8 +67,10 @@ class PreviewTargetsUpdateTest extends KernelTestBase {
    *   The properties whose columns the earlier copy lacked.
    * @param string $message
    *   The update's message.
+   *
+   * @dataProvider earlierCopies
    */
-  #[\PHPUnit\Framework\Attributes\DataProvider('earlierCopies')]
+  #[DataProvider('earlierCopies')]
   public function testTheUpdateAddsTheMissingColumns(array $missing, string $message): void {
     $consumer = Consumer::create([
       'client_id' => 'app',
@@ -84,14 +87,13 @@ class PreviewTargetsUpdateTest extends KernelTestBase {
     $this->assertSame($message, consumer_node_preview_update_10001());
 
     $this->assertSame([], $this->pendingChanges());
-    $storage = $this->container->get('entity_type.manager')->getStorage('consumer');
-    $targets = $storage->loadUnchanged($consumer->id())->get('preview_targets')->getValue();
+    $targets = $this->reload($consumer)->get('preview_targets')->getValue();
     $this->assertSame(['Frontend', 'By hand'], array_column($targets, 'label'));
     $this->assertSame(in_array('last_seen', $missing, TRUE) ? NULL : 1_700_000_000, isset($targets[0]['last_seen']) ? (int) $targets[0]['last_seen'] : NULL);
     $this->assertNull($targets[0]['expires'] ?? NULL);
 
     // A target saves with both times now.
-    $consumer = $storage->loadUnchanged($consumer->id());
+    $consumer = $this->reload($consumer);
     $consumer->get('preview_targets')->appendItem([
       'label' => 'Tunnel',
       'url' => 'https://tunnel.example.com/p',
@@ -99,7 +101,7 @@ class PreviewTargetsUpdateTest extends KernelTestBase {
       'expires' => 1_800_000_120,
     ]);
     $consumer->save();
-    $tunnel = $storage->loadUnchanged($consumer->id())->get('preview_targets')->get(2);
+    $tunnel = $this->reload($consumer)->get('preview_targets')->get(2);
     $this->assertSame(1_800_000_000, (int) $tunnel->get('last_seen')->getValue());
     $this->assertSame(1_800_000_120, (int) $tunnel->get('expires')->getValue());
 
@@ -140,7 +142,7 @@ class PreviewTargetsUpdateTest extends KernelTestBase {
     $storage = $this->container->get('entity_type.manager')->getStorage('consumer');
     $definition = $this->container->get('entity.definition_update_manager')->getFieldStorageDefinition('preview_targets', 'consumer');
     $mapping = $storage->getTableMapping();
-    $table = $mapping->getDedicatedDataTableName($definition);
+    $table = $mapping->getFieldTableName('preview_targets');
     $key_value = $this->container->get('keyvalue')->get('entity.storage_schema.sql');
     $stored = $key_value->get('consumer.field_schema_data.preview_targets');
     foreach ($properties as $property) {
@@ -149,6 +151,15 @@ class PreviewTargetsUpdateTest extends KernelTestBase {
       unset($stored[$table]['fields'][$column]);
     }
     $key_value->set('consumer.field_schema_data.preview_targets', $stored);
+  }
+
+  /**
+   * Loads a consumer as it is stored.
+   */
+  protected function reload(Consumer $consumer): Consumer {
+    $reloaded = $this->container->get('entity_type.manager')->getStorage('consumer')->loadUnchanged($consumer->id());
+    $this->assertInstanceOf(Consumer::class, $reloaded);
+    return $reloaded;
   }
 
   /**

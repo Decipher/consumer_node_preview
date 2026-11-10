@@ -179,7 +179,8 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
    */
   public function getTargetByKey(string $key): ?array {
     if (str_starts_with($key, 'settings:')) {
-      return $this->getSiteTargets()[substr($key, 9)] ?? NULL;
+      $target = $this->getSiteTargets()[substr($key, 9)] ?? NULL;
+      return $target === NULL ? NULL : $target + ['expires' => NULL];
     }
     if (!preg_match('/^(\d+):(\d+)$/', $key, $matches)) {
       return NULL;

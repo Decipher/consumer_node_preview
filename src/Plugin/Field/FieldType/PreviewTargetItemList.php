@@ -11,13 +11,14 @@ use Drupal\Core\Field\FieldItemList;
 /**
  * The preview targets of a consumer.
  *
- * The consumer form and a whole-list PUT send targets without a stamp. On
- * save, a target keeps the stamp of a stored target with the same label and
- * URL. A stamp is the last_seen time and the expires time together. Each stored stamp goes to one target only. A target with a new label
- * or URL gets no stamp, so it is then a target added by hand. A stamp that
- * the save sets wins, and it uses up a stored stamp. When a save has fewer
- * targets with a label and URL than the stored list, no stamp moves. The save
- * does not tell which copy went, and a copy added by hand must not expire.
+ * The consumer form and a whole-list PUT send targets without a stamp. On save,
+ * a target keeps the stamp of a stored target with the same label and URL. A
+ * stamp is the last_seen time and the expires time together. Each stored stamp
+ * goes to one target only. A target with a new label or URL gets no stamp, so
+ * it is then a target added by hand. A stamp that the save sets wins, and it
+ * uses up a stored stamp. When a save has fewer targets with a label and URL
+ * than the stored list, no stamp moves. The save does not tell which copy went,
+ * and a copy added by hand must not expire.
  *
  * @extends \Drupal\Core\Field\FieldItemList<\Drupal\consumer_node_preview\Plugin\Field\FieldType\PreviewTargetItem>
  */

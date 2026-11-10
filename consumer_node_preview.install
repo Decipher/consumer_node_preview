@@ -24,7 +24,7 @@ function consumer_node_preview_update_10001(): string {
   /** @var \Drupal\Core\Entity\Sql\SqlEntityStorageInterface $storage */
   $storage = \Drupal::entityTypeManager()->getStorage('consumer');
   $mapping = $storage->getTableMapping();
-  $table = $mapping->getDedicatedDataTableName($definition);
+  $table = $mapping->getFieldTableName('preview_targets');
   $schema = \Drupal::database()->schema();
   $key_value = \Drupal::keyValue('entity.storage_schema.sql');
   $key = 'consumer.field_schema_data.preview_targets';

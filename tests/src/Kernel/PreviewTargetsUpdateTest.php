@@ -11,10 +11,10 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
 /**
- * Tests the update that adds the preview targets' newer columns.
+ * Tests the update that adds the preview targets' expires column.
  *
- * A site that ran an earlier copy has stored targets and lacks a column. So
- * Drupal can't change the field itself, and the update adds the column.
+ * A 1.0.0-beta1 site with stored targets lacks the column, and Drupal can't
+ * change the field itself while it holds data. So the update adds it.
  *
  * @group consumer_node_preview
  */
@@ -52,26 +52,26 @@ class PreviewTargetsUpdateTest extends KernelTestBase {
   }
 
   /**
-   * Tests that the update changes nothing on a site that has the columns.
+   * Tests that the update changes nothing on a site that has the column.
    */
   public function testTheUpdateLeavesAnUpToDateSiteAlone(): void {
     $this->assertSame([], $this->pendingChanges());
-    $this->assertSame('The preview targets columns are already in place.', consumer_node_preview_update_10001());
+    $this->assertSame('The expires column is already in place.', consumer_node_preview_update_10001());
     $this->assertSame([], $this->pendingChanges());
   }
 
   /**
-   * Tests that the update adds the missing columns, and keeps the targets.
+   * Tests that the update adds and records the column, and keeps the targets.
    *
-   * @param list<string> $missing
-   *   The properties whose columns the earlier copy lacked.
+   * @param bool $drop_column
+   *   TRUE to drop the column, FALSE to leave it and drop only its record.
    * @param string $message
    *   The update's message.
    *
-   * @dataProvider earlierCopies
+   * @dataProvider sitesWithoutTheColumn
    */
-  #[DataProvider('earlierCopies')]
-  public function testTheUpdateAddsTheMissingColumns(array $missing, string $message): void {
+  #[DataProvider('sitesWithoutTheColumn')]
+  public function testTheUpdateAddsTheColumn(bool $drop_column, string $message): void {
     $consumer = Consumer::create([
       'client_id' => 'app',
       'label' => 'App',
@@ -81,7 +81,7 @@ class PreviewTargetsUpdateTest extends KernelTestBase {
       ],
     ]);
     $consumer->save();
-    $this->removeColumns($missing);
+    $this->removeColumn($drop_column);
     $this->assertNotSame([], $this->pendingChanges(), 'Drupal sees the field as changed.');
 
     $this->assertSame($message, consumer_node_preview_update_10001());
@@ -89,7 +89,7 @@ class PreviewTargetsUpdateTest extends KernelTestBase {
     $this->assertSame([], $this->pendingChanges());
     $targets = $this->reload($consumer)->get('preview_targets')->getValue();
     $this->assertSame(['Frontend', 'By hand'], array_column($targets, 'label'));
-    $this->assertSame(in_array('last_seen', $missing, TRUE) ? NULL : 1_700_000_000, isset($targets[0]['last_seen']) ? (int) $targets[0]['last_seen'] : NULL);
+    $this->assertSame(1_700_000_000, (int) $targets[0]['last_seen']);
     $this->assertNull($targets[0]['expires'] ?? NULL);
 
     // A target saves with both times now.
@@ -106,38 +106,38 @@ class PreviewTargetsUpdateTest extends KernelTestBase {
     $this->assertSame(1_800_000_120, (int) $tunnel->get('expires')->getValue());
 
     // A second run finds nothing to do.
-    $this->assertSame('The preview targets columns are already in place.', consumer_node_preview_update_10001());
+    $this->assertSame('The expires column is already in place.', consumer_node_preview_update_10001());
   }
 
   /**
-   * Returns the earlier copies of the module, by the columns they lacked.
+   * Returns the sites the update has work on.
    *
-   * @return array<string, array{list<string>, string}>
-   *   The missing properties and the update's message.
+   * @return array<string, array{bool, string}>
+   *   Whether the column goes too, and the update's message.
    */
-  public static function earlierCopies(): array {
+  public static function sitesWithoutTheColumn(): array {
     return [
       '1.0.0-beta1' => [
-        ['expires'],
+        TRUE,
         'Added preview_targets_expires to consumer__preview_targets.',
       ],
-      'Before 1.0.0-beta1' => [
-        ['last_seen', 'expires'],
-        'Added preview_targets_last_seen and preview_targets_expires to consumer__preview_targets.',
+      'A run that stopped before recording the column' => [
+        FALSE,
+        'Recorded preview_targets_expires on consumer__preview_targets as installed.',
       ],
     ];
   }
 
   /**
-   * Leaves the database as an earlier copy of the module did.
+   * Leaves the database as 1.0.0-beta1, or a stopped update, left it.
    *
-   * The columns go from the table and from the schema Drupal recorded for
-   * the field.
+   * The column goes from the schema Drupal recorded for the field, and from
+   * the table too for 1.0.0-beta1.
    *
-   * @param list<string> $properties
-   *   The properties whose columns go.
+   * @param bool $drop_column
+   *   TRUE to drop the column from the table as well.
    */
-  protected function removeColumns(array $properties): void {
+  protected function removeColumn(bool $drop_column): void {
     /** @var \Drupal\Core\Entity\Sql\SqlEntityStorageInterface $storage */
     $storage = $this->container->get('entity_type.manager')->getStorage('consumer');
     $definition = $this->container->get('entity.definition_update_manager')->getFieldStorageDefinition('preview_targets', 'consumer');
@@ -145,11 +145,11 @@ class PreviewTargetsUpdateTest extends KernelTestBase {
     $table = $mapping->getFieldTableName('preview_targets');
     $key_value = $this->container->get('keyvalue')->get('entity.storage_schema.sql');
     $stored = $key_value->get('consumer.field_schema_data.preview_targets');
-    foreach ($properties as $property) {
-      $column = $mapping->getFieldColumnName($definition, $property);
+    $column = $mapping->getFieldColumnName($definition, 'expires');
+    if ($drop_column) {
       $this->container->get('database')->schema()->dropField($table, $column);
-      unset($stored[$table]['fields'][$column]);
     }
+    unset($stored[$table]['fields'][$column]);
     $key_value->set('consumer.field_schema_data.preview_targets', $stored);
   }
 

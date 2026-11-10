@@ -16,12 +16,8 @@ and this project adheres to
   and cron deletes it. The targets endpoint lists each target's `expires`.
 - A DELETE on the targets endpoint that removes one target by its label, for
   a frontend that stops.
-
-### Fixed
-
-- An update that adds the preview targets' last seen and expires columns on
-  a site with stored targets. Drupal can't add them itself there, so a site
-  that ran a copy from before 1.0.0-beta1 had no last seen column.
+- An update that adds the expires column to a 1.0.0-beta1 site, keeping its
+  stored targets.
 
 ## 1.0.0-beta1 (2026-11-06)
 

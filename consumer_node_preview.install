@@ -8,11 +8,12 @@
 declare(strict_types=1);
 
 /**
- * Adds the last seen and expires columns to the stored preview targets.
+ * Adds the expires column to the stored preview targets.
  *
- * Drupal changes a field's columns only while the field holds no data, and a
- * site with targets has data. So the columns are added in place, and the rows
- * stay as they are. A new column is empty, as for a target added by hand.
+ * Drupal won't change a field's columns while it holds data, which a site
+ * with registered targets does. So the column is added in place, and the
+ * targets stay as they were. A run that stopped after adding the column
+ * records it on the next run.
  */
 function consumer_node_preview_update_10001(): string {
   $manager = \Drupal::entityDefinitionUpdateManager();
@@ -25,33 +26,31 @@ function consumer_node_preview_update_10001(): string {
   $storage = \Drupal::entityTypeManager()->getStorage('consumer');
   $mapping = $storage->getTableMapping();
   $table = $mapping->getFieldTableName('preview_targets');
+  $column = $mapping->getFieldColumnName($definition, 'expires');
   $schema = \Drupal::database()->schema();
   $key_value = \Drupal::keyValue('entity.storage_schema.sql');
   $key = 'consumer.field_schema_data.preview_targets';
   $stored = $key_value->get($key, []);
-  $columns = $definition->getSchema()['columns'];
 
-  $added = [];
-  foreach (['last_seen', 'expires'] as $property) {
-    $column = $mapping->getFieldColumnName($definition, $property);
-    if ($schema->fieldExists($table, $column)) {
-      continue;
-    }
-    // As Drupal builds the column of a field's own table: the field type's
-    // column, NOT NULL only for a required property.
-    $spec = $columns[$property];
-    $spec['not null'] = (bool) $definition->getPropertyDefinition($property)?->isRequired();
+  $exists = $schema->fieldExists($table, $column);
+  if ($exists && isset($stored[$table]['fields'][$column])) {
+    return 'The expires column is already in place.';
+  }
+
+  // As Drupal builds the column of a field's own table: the field type's
+  // column, NOT NULL only for a required property.
+  $spec = $definition->getSchema()['columns']['expires'];
+  $spec['not null'] = (bool) $definition->getPropertyDefinition('expires')?->isRequired();
+  if (!$exists) {
     $schema->addField($table, $column, $spec);
-    $stored[$table]['fields'][$column] = $spec;
-    $added[] = $column;
-  }
-  if (!$added) {
-    return 'The preview targets columns are already in place.';
   }
 
-  // Record the columns as installed, so Drupal reports no pending change.
+  // Record the column as installed, so Drupal reports no pending change.
+  $stored[$table]['fields'][$column] = $spec;
   $key_value->set($key, $stored);
   \Drupal::service('entity.last_installed_schema.repository')->setLastInstalledFieldStorageDefinition($definition);
 
-  return sprintf('Added %s to %s.', implode(' and ', $added), $table);
+  return $exists
+    ? sprintf('Recorded %s on %s as installed.', $column, $table)
+    : sprintf('Added %s to %s.', $column, $table);
 }

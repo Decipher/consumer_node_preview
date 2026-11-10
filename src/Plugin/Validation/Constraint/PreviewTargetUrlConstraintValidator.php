@@ -80,7 +80,8 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
    * Frontend picker. Keeping it must not stop the consumer saving, or one
    * frontend's old target would block another frontend's registration. Only
    * the same target counts, by its label and URL, so a new target can't copy
-   * an old target's URL past the checks.
+   * an old target's URL past the checks. Each saved copy covers one copy in
+   * the field, so an extra copy is new too.
    *
    * @param string $url
    *   The URL being validated.
@@ -96,13 +97,23 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
     if (!$stored instanceof ContentEntityInterface) {
       return FALSE;
     }
+    $name = $item->getFieldDefinition()->getName();
     $label = (string) $item->get('label')->getValue();
-    foreach ($stored->get($item->getFieldDefinition()->getName())->getValue() as $saved) {
-      if (($saved['url'] ?? NULL) === $url && (string) ($saved['label'] ?? '') === $label) {
-        return TRUE;
+    $same = fn(mixed $saved_label, mixed $saved_url): bool => $saved_url === $url && (string) $saved_label === $label;
+    $saved = 0;
+    foreach ($stored->get($name)->getValue() as $value) {
+      $saved += (int) $same($value['label'] ?? '', $value['url'] ?? NULL);
+    }
+    // This item's place among the field's copies of the same target.
+    $copy = 0;
+    /** @var \Drupal\Core\Field\FieldItemInterface $other */
+    foreach ($entity->get($name) as $other) {
+      $copy += (int) $same($other->get('label')->getValue(), $other->get('url')->getValue());
+      if ($other === $item) {
+        break;
       }
     }
-    return FALSE;
+    return $copy > 0 && $copy <= $saved;
   }
 
 }

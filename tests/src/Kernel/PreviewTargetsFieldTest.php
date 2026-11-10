@@ -469,6 +469,28 @@ class PreviewTargetsFieldTest extends KernelTestBase {
   }
 
   /**
+   * Tests that each saved copy of a target exempts one copy, and no more.
+   *
+   * Saved once, a target with a user name can stay. A second copy with the
+   * same label and URL is new, so the check refuses it.
+   */
+  public function testStoredTargetExemptsOneCopyEach(): void {
+    $old = ['label' => 'Old', 'url' => 'https://user:pass@old.example.com/p'];
+    $consumer = $this->createConsumer('App', [$old]);
+    $paths = fn(): array => array_map(
+      fn(ConstraintViolationInterface $violation): string => $violation->getPropertyPath(),
+      iterator_to_array($consumer->validate()->getByField('preview_targets')),
+    );
+    $consumer->set('preview_targets', [$old, ['label' => 'New', 'url' => 'https://new.example.com/p'], $old]);
+    $this->assertSame(['preview_targets.2.url'], $paths());
+
+    // Saved twice, both copies can stay, wherever they are.
+    $twice = $this->createConsumer('Twice', [$old, $old]);
+    $twice->set('preview_targets', [['label' => 'New', 'url' => 'https://new.example.com/p'], $old, $old]);
+    $this->assertSame([], iterator_to_array($twice->validate()->getByField('preview_targets')));
+  }
+
+  /**
    * Tests that a settings.php target with tokens in its host part is left out.
    */
   public function testSiteTargetWithTokensInItsHostIsLeftOut(): void {

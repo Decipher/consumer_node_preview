@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- A registered target can set its own expiry. A PATCH with `expires_in`, in
+  seconds, gives the target an `expires` time, capped at the delete limit.
+  After it, the target leaves the Frontend picker and gets no preview token,
+  and cron deletes it. The targets endpoint lists each target's `expires`.
+- A DELETE on the targets endpoint that removes one target by its label, for
+  a frontend that stops.
+
+### Fixed
+
+- An update that adds the preview targets' last seen and expires columns on
+  a site with stored targets. Drupal can't add them itself there, so a site
+  that ran a copy from before 1.0.0-beta1 had no last seen column.
+
 ## 1.0.0-beta1 (2026-11-06)
 
 ### Added

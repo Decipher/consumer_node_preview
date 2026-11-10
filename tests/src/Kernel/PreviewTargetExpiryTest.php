@@ -383,4 +383,76 @@ class PreviewTargetExpiryTest extends KernelTestBase {
     ], $this->provider->getGroupedTargetOptions());
   }
 
+  /**
+   * Tests that a target whose expires time has come leaves the picker.
+   *
+   * It gets no preview token either, because the preview finds no target for
+   * its key. A target whose time is still to come stays, as does one with no
+   * time of its own.
+   */
+  public function testAnExpiredTargetLeavesThePicker(): void {
+    $alpha = $this->createConsumer('Alpha', [
+      ['label' => 'Past', 'url' => 'http://localhost:3000/p', 'last_seen' => $this->now - 120, 'expires' => $this->now - 1],
+      ['label' => 'Now', 'url' => 'http://localhost:3001/p', 'last_seen' => $this->now - 120, 'expires' => $this->now],
+      ['label' => 'Soon', 'url' => 'http://localhost:3002/p', 'last_seen' => $this->now, 'expires' => $this->now + 60],
+      ['label' => 'Registered', 'url' => 'http://localhost:3003/p', 'last_seen' => $this->now],
+      ['label' => 'By hand', 'url' => 'https://alpha.example.com/p'],
+    ]);
+    $id = $alpha->id();
+
+    $this->assertSame([$id . ':2', $id . ':3', $id . ':4'], array_keys($this->provider->getAllTargets()));
+    $this->assertNull($this->provider->getTargetByKey($id . ':0'));
+    $this->assertNull($this->provider->getTargetByKey($id . ':1'));
+    $this->assertSame('Soon', $this->provider->getTargetByKey($id . ':2')['label']);
+    $this->assertSame($this->now + 60, $this->provider->getTargetByKey($id . ':2')['expires']);
+
+    // An expired target that is also past the inactive limit stays out.
+    $beta = $this->createConsumer('Beta', [
+      ['label' => 'Old', 'url' => 'http://localhost:3004/p', 'last_seen' => $this->now - 2 * 86400, 'expires' => $this->now - 86400],
+    ]);
+    $this->assertArrayNotHasKey($beta->id() . ':0', $this->provider->getAllTargets());
+  }
+
+  /**
+   * Tests that cron deletes a target whose expires time has come.
+   */
+  public function testCronDeletesExpiredTargets(): void {
+    $alpha = $this->createConsumer('Alpha', [
+      ['label' => 'Past', 'url' => 'http://localhost:3000/p', 'last_seen' => $this->now - 120, 'expires' => $this->now - 1],
+      ['label' => 'Soon', 'url' => 'http://localhost:3001/p', 'last_seen' => $this->now, 'expires' => $this->now + 60],
+      ['label' => 'By hand', 'url' => 'https://alpha.example.com/p'],
+    ]);
+    $beta = $this->createConsumer('Beta', [
+      ['label' => 'Now', 'url' => 'http://localhost:3002/p', 'last_seen' => $this->now - 120, 'expires' => $this->now],
+    ], FALSE);
+
+    $this->cron();
+
+    $this->assertSame(['Soon' => $this->now, 'By hand' => NULL], $this->stamps($alpha));
+    $this->assertSame([], $this->stamps($beta));
+  }
+
+  /**
+   * Tests that a save keeps a target's expires time with its stamp.
+   *
+   * The consumer form and a PUT send targets without either. An unchanged
+   * target keeps both, and a changed one loses both.
+   */
+  public function testSaveKeepsTheExpiresTimeWithTheStamp(): void {
+    $alpha = $this->createConsumer('Alpha', [
+      ['label' => 'Tunnel', 'url' => 'http://localhost:3000/p', 'last_seen' => 1_700_000_000, 'expires' => 1_700_000_120],
+      ['label' => 'Moved', 'url' => 'http://localhost:3001/p', 'last_seen' => 1_700_000_000, 'expires' => 1_700_000_120],
+    ]);
+    $alpha->set('preview_targets', [
+      ['label' => 'Moved', 'url' => 'http://localhost:4001/p'],
+      ['label' => 'Tunnel', 'url' => 'http://localhost:3000/p'],
+    ])->save();
+
+    $targets = Consumer::load($alpha->id())->get('preview_targets')->getValue();
+    $this->assertNull($targets[0]['last_seen'] ?? NULL);
+    $this->assertNull($targets[0]['expires'] ?? NULL);
+    $this->assertSame(1_700_000_000, (int) $targets[1]['last_seen']);
+    $this->assertSame(1_700_000_120, (int) $targets[1]['expires']);
+  }
+
 }

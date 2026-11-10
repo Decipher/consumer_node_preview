@@ -9,10 +9,10 @@ use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\Core\TypedData\DataDefinition;
 
 /**
- * A preview target: a label, a URL template and when it was last seen.
+ * A preview target: a label, a URL template, and its stamp.
  *
- * A frontend that registers its own target stamps last_seen. A target added
- * by hand has no stamp, and never expires.
+ * A frontend that registers its own target stamps last_seen, and can set an
+ * expires time too. A target added by hand has no stamp, and never expires.
  *
  * @FieldType(
  *   id = "consumer_preview_target",
@@ -51,6 +51,9 @@ class PreviewTargetItem extends FieldItemBase {
     $properties['last_seen'] = DataDefinition::create('timestamp')
       ->setLabel(t('Last seen'))
       ->setDescription(t('When the frontend last registered the target, or empty for a target added by hand.'));
+    $properties['expires'] = DataDefinition::create('timestamp')
+      ->setLabel(t('Expires'))
+      ->setDescription(t('When the target leaves the picker, as the frontend set it when it registered. Empty for no time of its own.'));
     return $properties;
   }
 
@@ -69,6 +72,9 @@ class PreviewTargetItem extends FieldItemBase {
           'length' => 2048,
         ],
         'last_seen' => [
+          'type' => 'int',
+        ],
+        'expires' => [
           'type' => 'int',
         ],
       ],

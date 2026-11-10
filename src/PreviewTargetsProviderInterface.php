@@ -38,8 +38,9 @@ interface PreviewTargetsProviderInterface {
    * @param \Drupal\consumers\Entity\ConsumerInterface $consumer
    *   The consumer.
    *
-   * @return array<int, array{label: string, url: string}>
-   *   The targets, in field order.
+   * @return array<int, array{label: string, url: string, expires: int|null}>
+   *   The targets, in field order. The expires value is the time the target
+   *   leaves the picker, or NULL when the target sets no time of its own.
    */
   public function getTargets(ConsumerInterface $consumer): array;
 
@@ -58,7 +59,8 @@ interface PreviewTargetsProviderInterface {
    * Returns every target: the site's first, then each published consumer's.
    *
    * The inactive targets come last. An inactive target is a registered one
-   * whose last registration is older than getInactiveAfter().
+   * whose last registration is older than getInactiveAfter(). A target whose
+   * expires time has come is left out.
    *
    * @return array<string, array{label: string, url: string, layouts: list<string>, consumer: \Drupal\consumers\Entity\ConsumerInterface|null, group: string, option_label: string, last_seen: int|null, inactive: bool}>
    *   The targets, keyed "settings:<name>" or "<consumer id>:<delta>". A
@@ -167,7 +169,8 @@ interface PreviewTargetsProviderInterface {
   /**
    * Deletes the registered targets older than getDeleteAfter().
    *
-   * A target added by hand has no stamp, so it is never deleted.
+   * A target whose expires time has come goes too. A target added by hand has
+   * no stamp, so it is never deleted.
    *
    * @return int
    *   The number of targets deleted.

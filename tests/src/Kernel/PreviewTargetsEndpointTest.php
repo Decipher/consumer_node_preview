@@ -369,8 +369,8 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
     $data = json_decode((string) $response->getContent(), TRUE);
     $this->assertSame($this->consumer->uuid(), $data['consumer']);
     $this->assertSame([
-      ['label' => 'Local', 'url' => 'http://localhost:4000/p'],
-      ['label' => 'Staging', 'url' => 'https://stage.example.com/p'],
+      ['label' => 'Local', 'url' => 'http://localhost:4000/p', 'expires' => NULL],
+      ['label' => 'Staging', 'url' => 'https://stage.example.com/p', 'expires' => NULL],
     ], $data['targets']);
     $this->assertSame($data['targets'], $this->storedTargets());
     $this->assertSame(['Local' => 1_800_000_000, 'Staging' => 1_700_000_000], $this->storedStamps());
@@ -387,8 +387,8 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
     ], $this->consumer->uuid(), time: 1_800_000_000);
     $this->assertSame(200, $response->getStatusCode());
     $this->assertSame([
-      ['label' => 'Local', 'url' => 'http://localhost:3000/p'],
-      ['label' => 'Preview', 'url' => 'https://preview.example.com/p'],
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p', 'expires' => NULL],
+      ['label' => 'Preview', 'url' => 'https://preview.example.com/p', 'expires' => NULL],
     ], $this->storedTargets());
     // The hand-added target stays unstamped, so it never expires.
     $this->assertSame(['Local' => NULL, 'Preview' => 1_800_000_000], $this->storedStamps());
@@ -494,7 +494,7 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
     $this->assertStringContainsString('preview_targets.1.url', $message);
     $this->assertStringContainsString('ftp://example.com/?a=1&b=2', $message);
 
-    $this->assertSame([['label' => 'Local', 'url' => 'http://localhost:3000/p']], $this->storedTargets());
+    $this->assertSame([['label' => 'Local', 'url' => 'http://localhost:3000/p', 'expires' => NULL]], $this->storedTargets());
     $this->assertSame(['Local' => NULL], $this->storedStamps());
   }
 
@@ -521,8 +521,8 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
     $this->assertSame(200, $response->getStatusCode(), (string) $response->getContent());
     $storage->resetCache([$this->consumer->id()]);
     $this->assertSame([
-      ['label' => 'Old', 'url' => 'https://old.example.com/p'],
-      ['label' => 'New', 'url' => 'https://new.example.com/p'],
+      ['label' => 'Old', 'url' => 'https://old.example.com/p', 'expires' => NULL],
+      ['label' => 'New', 'url' => 'https://new.example.com/p', 'expires' => NULL],
     ], $this->storedTargets());
 
     $response = $this->call('PATCH', [
@@ -559,7 +559,7 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
     $this->assertSame(404, $this->call('PATCH', $payload)->getStatusCode());
     // With a session cookie, it needs the CSRF header.
     $this->assertSame(403, $this->call('PATCH', $payload, $uuid, session: TRUE)->getStatusCode());
-    $this->assertSame([['label' => 'Local', 'url' => 'http://localhost:3000/p']], $this->storedTargets());
+    $this->assertSame([['label' => 'Local', 'url' => 'http://localhost:3000/p', 'expires' => NULL]], $this->storedTargets());
 
     // The owner names the consumer by its client id.
     $this->assertSame(200, $this->call('PATCH', $payload, headers: ['X-Consumer-ID' => 'app'])->getStatusCode());
@@ -713,6 +713,118 @@ class PreviewTargetsEndpointTest extends KernelTestBase {
     $this->setUpCurrentUser(['uid' => 0]);
     $this->assertTrue($this->container->get('current_user')->hasPermission('register consumer node preview targets'));
     $this->assertSame(403, $this->call('GET', consumer_uuid: $ownerless->uuid())->getStatusCode());
+  }
+
+  /**
+   * Returns the stored expires times of the test consumer, freshly loaded.
+   *
+   * @return array<string, int|null>
+   *   The expires value of each target, keyed by label, in field order.
+   */
+  protected function storedExpiry(): array {
+    return array_column($this->storedTargets(), 'expires', 'label');
+  }
+
+  /**
+   * Tests that a PATCH with expires_in gives the target an expires time.
+   *
+   * The time is the request time plus expires_in, capped at delete_after. A
+   * PATCH without expires_in leaves the target with none.
+   */
+  public function testRegisterSetsTheExpiresTime(): void {
+    $this->setCurrentUser($this->owner);
+    $uuid = $this->consumer->uuid();
+    $target = ['label' => 'Tunnel', 'url' => 'https://tunnel.example.com/p'];
+
+    $response = $this->call('PATCH', ['target' => $target + ['expires_in' => 120]], $uuid, time: 1_800_000_000);
+    $this->assertSame(200, $response->getStatusCode());
+    $data = json_decode((string) $response->getContent(), TRUE);
+    $this->assertSame(1_800_000_120, $data['targets'][1]['expires']);
+    $this->assertSame(['Local' => NULL, 'Tunnel' => 1_800_000_120], $this->storedExpiry());
+    $this->assertSame(['Local' => NULL, 'Tunnel' => 1_800_000_000], $this->storedStamps());
+
+    // Each registration sets a new time.
+    $this->call('PATCH', ['target' => $target + ['expires_in' => 120]], $uuid, time: 1_800_000_100);
+    $this->assertSame(['Local' => NULL, 'Tunnel' => 1_800_000_220], $this->storedExpiry());
+
+    // A frontend can't keep its target longer than the site allows.
+    $this->call('PATCH', ['target' => $target + ['expires_in' => 1_000_000_000]], $uuid, time: 1_800_000_200);
+    $this->assertSame(['Local' => NULL, 'Tunnel' => 1_800_000_200 + 2592000], $this->storedExpiry());
+
+    $this->call('PATCH', ['target' => $target], $uuid, time: 1_800_000_300);
+    $this->assertSame(['Local' => NULL, 'Tunnel' => NULL], $this->storedExpiry());
+  }
+
+  /**
+   * Tests that an expires_in that is not a whole number above zero fails.
+   */
+  public function testRegisterRefusesABadExpiresIn(): void {
+    $this->setCurrentUser($this->owner);
+    $target = ['label' => 'Tunnel', 'url' => 'https://tunnel.example.com/p'];
+    foreach (['120', 0, -1, 1.5, TRUE, []] as $expires_in) {
+      $response = $this->call('PATCH', ['target' => $target + ['expires_in' => $expires_in]], $this->consumer->uuid());
+      $this->assertSame(422, $response->getStatusCode(), var_export($expires_in, TRUE));
+      $this->assertStringContainsString('expires_in', (string) $response->getContent());
+    }
+    $this->assertSame(['Local'], array_column($this->storedTargets(), 'label'));
+  }
+
+  /**
+   * Tests that a DELETE removes the target with its label, and only that one.
+   *
+   * A second DELETE finds nothing to remove, and still succeeds.
+   */
+  public function testDeleteRemovesTheTargetWithItsLabel(): void {
+    $this->giveTargets([
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p'],
+      ['label' => 'Tunnel', 'url' => 'https://tunnel.example.com/p', 'last_seen' => 1_700_000_000],
+      ['label' => 'Staging', 'url' => 'https://stage.example.com/p', 'last_seen' => 1_700_000_100],
+    ]);
+    $this->setCurrentUser($this->owner);
+
+    $response = $this->call('DELETE', ['target' => ['label' => ' Tunnel ']], $this->consumer->uuid());
+    $this->assertSame(200, $response->getStatusCode());
+    $data = json_decode((string) $response->getContent(), TRUE);
+    $this->assertSame(['Local', 'Staging'], array_column($data['targets'], 'label'));
+    $this->assertSame(['Local' => NULL, 'Staging' => 1_700_000_100], $this->storedStamps());
+
+    $this->assertSame(200, $this->call('DELETE', ['target' => ['label' => 'Tunnel']], $this->consumer->uuid())->getStatusCode());
+    $this->assertSame(['Local', 'Staging'], array_column($this->storedTargets(), 'label'));
+  }
+
+  /**
+   * Tests that a DELETE needs a target label, and changes nothing without.
+   */
+  public function testDeleteValidation(): void {
+    $this->setCurrentUser($this->owner);
+    foreach ([NULL, [], ['target' => 'Local'], ['target' => []], ['target' => ['label' => 1]]] as $payload) {
+      $response = $this->call('DELETE', $payload, $this->consumer->uuid());
+      $this->assertSame(422, $response->getStatusCode(), json_encode($payload));
+    }
+    $this->assertSame(['Local'], array_column($this->storedTargets(), 'label'));
+  }
+
+  /**
+   * Tests that a DELETE has the same access rules as a PATCH.
+   */
+  public function testDeleteAccess(): void {
+    $payload = ['target' => ['label' => 'Local']];
+    $uuid = $this->consumer->uuid();
+
+    $this->setUpCurrentUser(['uid' => 0]);
+    $this->assertSame(403, $this->call('DELETE', $payload, $uuid)->getStatusCode());
+    $this->setCurrentUser($this->account());
+    $this->assertSame(403, $this->call('DELETE', $payload, $uuid)->getStatusCode());
+    $this->setCurrentUser($this->account(['register consumer node preview targets']));
+    $this->assertSame(403, $this->call('DELETE', $payload, $uuid)->getStatusCode());
+    $this->assertSame(403, $this->call('DELETE', $payload, headers: ['X-Consumer-ID' => 'app'])->getStatusCode());
+    $this->setCurrentUser($this->owner);
+    $this->assertSame(404, $this->call('DELETE', $payload)->getStatusCode());
+    $this->assertSame(403, $this->call('DELETE', $payload, $uuid, session: TRUE)->getStatusCode());
+    $this->assertSame(['Local'], array_column($this->storedTargets(), 'label'));
+
+    $this->assertSame(200, $this->call('DELETE', $payload, headers: ['X-Consumer-ID' => 'app'])->getStatusCode());
+    $this->assertSame([], $this->storedTargets());
   }
 
 }

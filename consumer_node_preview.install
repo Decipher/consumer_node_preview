@@ -1,0 +1,57 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for Consumer Node Preview.
+ */
+
+declare(strict_types=1);
+
+/**
+ * Adds the last seen and expires columns to the stored preview targets.
+ *
+ * Drupal changes a field's columns only while the field holds no data, and a
+ * site with targets has data. So the columns are added in place, and the rows
+ * stay as they are. A new column is empty, as for a target added by hand.
+ */
+function consumer_node_preview_update_10001(): string {
+  $manager = \Drupal::entityDefinitionUpdateManager();
+  $definition = \Drupal::service('entity_field.manager')->getFieldStorageDefinitions('consumer')['preview_targets'] ?? NULL;
+  if (!$definition || !$manager->getFieldStorageDefinition('preview_targets', 'consumer')) {
+    return 'Consumers have no preview targets field. Nothing to update.';
+  }
+
+  /** @var \Drupal\Core\Entity\Sql\SqlEntityStorageInterface $storage */
+  $storage = \Drupal::entityTypeManager()->getStorage('consumer');
+  $mapping = $storage->getTableMapping();
+  $table = $mapping->getDedicatedDataTableName($definition);
+  $schema = \Drupal::database()->schema();
+  $key_value = \Drupal::keyValue('entity.storage_schema.sql');
+  $key = 'consumer.field_schema_data.preview_targets';
+  $stored = $key_value->get($key, []);
+  $columns = $definition->getSchema()['columns'];
+
+  $added = [];
+  foreach (['last_seen', 'expires'] as $property) {
+    $column = $mapping->getFieldColumnName($definition, $property);
+    if ($schema->fieldExists($table, $column)) {
+      continue;
+    }
+    // As Drupal builds the column of a field's own table: the field type's
+    // column, NOT NULL only for a required property.
+    $spec = $columns[$property];
+    $spec['not null'] = (bool) $definition->getPropertyDefinition($property)?->isRequired();
+    $schema->addField($table, $column, $spec);
+    $stored[$table]['fields'][$column] = $spec;
+    $added[] = $column;
+  }
+  if (!$added) {
+    return 'The preview targets columns are already in place.';
+  }
+
+  // Record the columns as installed, so Drupal reports no pending change.
+  $key_value->set($key, $stored);
+  \Drupal::service('entity.last_installed_schema.repository')->setLastInstalledFieldStorageDefinition($definition);
+
+  return sprintf('Added %s to %s.', implode(' and ', $added), $table);
+}

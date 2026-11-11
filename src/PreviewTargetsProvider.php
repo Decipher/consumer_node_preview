@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\consumer_node_preview;
 
 use Drupal\Component\Datetime\TimeInterface;
+use Drupal\Component\Utility\UrlHelper;
 use Drupal\consumers\Entity\ConsumerInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityFieldManagerInterface;
@@ -388,27 +389,15 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
    * {@inheritdoc}
    */
   public function hasPlainAuthority(string $url): bool {
-    // Read the URL as a browser does. It drops leading and trailing spaces and
-    // control characters, removes tabs and line breaks, and reads a backslash
-    // as a slash.
-    $url = str_replace(["\t", "\n", "\r", '\\'], ['', '', '', '/'], trim($url, "\x00..\x20"));
-    // For http and https, a browser reads any number of slashes after the
-    // scheme, even none, as the start of the host part. Other URLs have one
-    // only after "//". A path, such as a settings.php target's, has none.
-    if (!preg_match('#^https?:/*([^/?\#]*)#i', $url, $matches) && !preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//([^/?\#]*)#i', $url, $matches)) {
-      return TRUE;
+    // A URL with a scheme, or one that starts with "//", has a host part. It
+    // must be a valid absolute URL, which core's check says has nothing in
+    // its host but a name, an IPv4 or IPv6 address and a port, and it must
+    // have no user name. Anything else must be a valid path.
+    if (preg_match('/^[a-z][a-z0-9+.-]*:|^\/\//i', $url)) {
+      $absolute = str_starts_with($url, '//') ? 'https:' . $url : $url;
+      return UrlHelper::isValid($absolute, TRUE) && parse_url($absolute, PHP_URL_USER) === NULL;
     }
-    // A user name ends at "@". Square brackets may only hold an IPv6 address.
-    // Anything else in them is a token, or a host no browser can open.
-    if (str_contains($matches[1], '@')) {
-      return FALSE;
-    }
-    if (strpbrk($matches[1], '[]') === FALSE) {
-      return TRUE;
-    }
-    // A bracketed host part is one IPv6 address, then an optional port.
-    return preg_match('/^\[([^\[\]]+)\](?::\d*)?$/', $matches[1], $address) === 1
-      && filter_var($address[1], FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== FALSE;
+    return UrlHelper::isValid($url);
   }
 
   /**

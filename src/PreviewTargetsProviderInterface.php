@@ -171,7 +171,9 @@ interface PreviewTargetsProviderInterface {
    * Whether a URL template's host part holds no user name and no tokens.
    *
    * The host is checked before the tokens go in. A token or a user name in
-   * the host part could move the host once the tokens are filled in.
+   * the host part could move the host once the tokens are filled in. Core's
+   * UrlHelper::isValid() checks the URL. A URL with stray spaces, tabs or a
+   * backslash fails it, where a browser would read the URL differently.
    *
    * @param string $url
    *   The URL template.

@@ -25,13 +25,18 @@ final class PreviewFieldChanges {
   /**
    * The consumers being saved whose only changes are preview fields.
    *
-   * @var array<int, true>
+   * Keyed by the consumer object, so a consumer that is gone takes its
+   * answer with it, and no other consumer can ever read it.
+   *
+   * @var \WeakMap<\Drupal\consumers\Entity\ConsumerInterface, true>
    */
-  private array $previewOnly = [];
+  private \WeakMap $weakMap;
 
   public function __construct(
     private readonly EntityTypeManagerInterface $entityTypeManager,
-  ) {}
+  ) {
+    $this->weakMap = new \WeakMap();
+  }
 
   /**
    * Records whether a consumer about to be saved changes only preview fields.
@@ -40,7 +45,7 @@ final class PreviewFieldChanges {
    *   The consumer, before its save.
    */
   public function record(ConsumerInterface $consumer): void {
-    unset($this->previewOnly[spl_object_id($consumer)]);
+    unset($this->weakMap[$consumer]);
     if ($consumer->isNew()) {
       return;
     }
@@ -52,9 +57,6 @@ final class PreviewFieldChanges {
       if (in_array($name, self::PREVIEW_FIELDS, TRUE)) {
         continue;
       }
-      if (!$stored->hasField($name)) {
-        return;
-      }
       // An empty item is no value, as core compares fields. The copies keep
       // both entities as they are.
       $now = clone $items;
@@ -63,7 +65,7 @@ final class PreviewFieldChanges {
         return;
       }
     }
-    $this->previewOnly[spl_object_id($consumer)] = TRUE;
+    $this->weakMap[$consumer] = TRUE;
   }
 
   /**
@@ -75,9 +77,8 @@ final class PreviewFieldChanges {
    *   The consumer, after its save.
    */
   public function onlyPreviewFieldsChanged(ConsumerInterface $consumer): bool {
-    $key = spl_object_id($consumer);
-    $answer = isset($this->previewOnly[$key]);
-    unset($this->previewOnly[$key]);
+    $answer = isset($this->weakMap[$consumer]);
+    unset($this->weakMap[$consumer]);
     return $answer;
   }
 

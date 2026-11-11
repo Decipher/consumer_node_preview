@@ -92,8 +92,8 @@ class PreviewTargetsFieldTest extends KernelTestBase {
 
     $reloaded = Consumer::load($consumer->id());
     $this->assertSame([
-      ['label' => 'Local', 'url' => 'http://localhost:3000/p#[jsonapi_node_preview]'],
-      ['label' => 'Staging', 'url' => 'https://stage.example.com/p#[jsonapi_node_preview]'],
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p#[jsonapi_node_preview]', 'expires' => NULL],
+      ['label' => 'Staging', 'url' => 'https://stage.example.com/p#[jsonapi_node_preview]', 'expires' => NULL],
     ], $this->provider->getTargets($reloaded));
   }
 

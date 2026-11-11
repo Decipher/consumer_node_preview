@@ -66,9 +66,11 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
   public function getTargets(ConsumerInterface $consumer): array {
     $targets = [];
     foreach ($consumer->get('preview_targets') as $item) {
+      $expires = $item->get('expires')->getValue();
       $targets[] = [
         'label' => (string) $item->get('label')->getValue(),
         'url' => (string) $item->get('url')->getValue(),
+        'expires' => $expires === NULL ? NULL : (int) $expires,
       ];
     }
     return $targets;
@@ -119,7 +121,7 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
         $last_seen = $item->get('last_seen')->getValue();
         $last_seen = $last_seen === NULL ? NULL : (int) $last_seen;
         $url = (string) $item->get('url')->getValue();
-        if (!$this->allowsStoredUrl($url)) {
+        if (!$this->allowsStoredUrl($url) || $this->hasExpired($item->get('expires')->getValue())) {
           continue;
         }
         $label = (string) $item->get('label')->getValue();
@@ -186,7 +188,8 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
    */
   public function getTargetByKey(string $key): ?array {
     if (str_starts_with($key, 'settings:')) {
-      return $this->getSiteTargets()[substr($key, 9)] ?? NULL;
+      $target = $this->getSiteTargets()[substr($key, 9)] ?? NULL;
+      return $target === NULL ? NULL : $target + ['expires' => NULL];
     }
     if (!preg_match('/^(\d+):(\d+)$/', $key, $matches)) {
       return NULL;
@@ -197,7 +200,7 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
       return NULL;
     }
     $target = $this->getTargets($consumer)[(int) $matches[2]] ?? NULL;
-    if ($target === NULL || !$this->allowsStoredUrl($target['url'])) {
+    if ($target === NULL || !$this->allowsStoredUrl($target['url']) || $this->hasExpired($target['expires'])) {
       return NULL;
     }
     return $target + ['layouts' => $this->getLayouts($consumer), 'consumer' => $consumer];
@@ -323,12 +326,15 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
    * {@inheritdoc}
    */
   public function deleteExpiredTargets(): int {
-    $before = $this->time->getRequestTime() - $this->getDeleteAfter();
+    $now = $this->time->getRequestTime();
+    $before = $now - $this->getDeleteAfter();
     $storage = $this->entityTypeManager->getStorage('consumer');
     // Unpublished consumers too: their targets would show again on publish.
-    $ids = $storage->getQuery()
-      ->accessCheck(FALSE)
-      ->condition('preview_targets.last_seen', $before, '<')
+    $query = $storage->getQuery()->accessCheck(FALSE);
+    $ids = $query
+      ->condition($query->orConditionGroup()
+        ->condition('preview_targets.last_seen', $before, '<')
+        ->condition('preview_targets.expires', $now, '<='))
       ->execute();
     $deleted = 0;
     /** @var \Drupal\consumers\Entity\ConsumerInterface $consumer */
@@ -337,7 +343,8 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
       $count = $targets->count();
       $targets->filter(function ($item) use ($before): bool {
         $last_seen = $item->get('last_seen')->getValue();
-        return $last_seen === NULL || (int) $last_seen >= $before;
+        return ($last_seen === NULL || (int) $last_seen >= $before)
+          && !$this->hasExpired($item->get('expires')->getValue());
       });
       if ($targets->count() < $count) {
         $deleted += $count - $targets->count();
@@ -422,6 +429,16 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     }
     $host = parse_url($url, PHP_URL_HOST);
     return is_string($host) && !str_contains($url, '\\') && $this->isAllowedHost(strtolower($host));
+  }
+
+  /**
+   * Whether a target's expires time has come.
+   *
+   * @param mixed $expires
+   *   The target's expires value. Empty means the target sets no time.
+   */
+  protected function hasExpired(mixed $expires): bool {
+    return $expires !== NULL && (int) $expires <= $this->time->getRequestTime();
   }
 
   /**

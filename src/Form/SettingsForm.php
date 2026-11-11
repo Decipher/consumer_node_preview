@@ -59,7 +59,7 @@ class SettingsForm extends ConfigFormBase {
     $form['expiry'] = [
       '#type' => 'details',
       '#title' => $this->t('Registered targets'),
-      '#description' => $this->t('Only targets that frontends register expire. A target added on the consumer form or in settings.php never does.'),
+      '#description' => $this->t('Only targets that frontends register expire. A target added on the consumer form or in settings.php never does. A frontend can also give its target an earlier expiry of its own, up to the Delete after time.'),
       '#open' => TRUE,
     ];
     $form['expiry']['inactive_after'] = [

@@ -17,9 +17,11 @@ Content-Type: application/json
 | `GET` | Reads the targets and layouts |
 | `PUT` | Replaces all targets. Sends `"targets": [...]` |
 | `PATCH` | Replaces the target with that label in place, or adds it at the end |
+| `DELETE` | Removes the target with that label. Sends `"target": {"label": "..."}` |
 
-`layouts` is optional. All three answer with `consumer`, `targets` and
-`layouts`. A bad payload gets a 422 with a `message`.
+`layouts` is optional. All four answer with `consumer`, `targets` and
+`layouts`. Each target has its `label`, `url` and `expires`. A bad payload gets
+a 422 with a `message`.
 
 ## Naming the consumer
 
@@ -34,7 +36,7 @@ own the consumer or have `administer consumer entities`. Otherwise it's a 403.
 `X-Consumer-ID` never grants access.
 
 Use any authentication your site has enabled, such as a Simple OAuth token. With
-a session cookie, `PUT` and `PATCH` also need `X-CSRF-Token` from
+a session cookie, `PUT`, `PATCH` and `DELETE` also need `X-CSRF-Token` from
 `/session/token`. From a browser on another origin, add the method to the CORS
 `allowedMethods`.
 
@@ -55,10 +57,38 @@ $config['consumer_node_preview.settings']['inactive_after'] = 86400;
 $config['consumer_node_preview.settings']['delete_after'] = 2592000;
 ```
 
+### A target's own expiry
+
+A frontend that only runs for a while, such as a tunnel or a branch build, can
+say how long its target lasts. Add `expires_in` to the target, in seconds:
+
+```json
+{"target": {"label": "Tunnel", "url": "https://abc.trycloudflare.com/preview#[jsonapi_node_preview]", "expires_in": 43200}}
+```
+
+The target's `expires` is then the time of the `PATCH` plus `expires_in`, capped
+at the delete limit. After it, the target leaves the Frontend picker and gets
+no preview token, and cron deletes it. Each `PATCH` sets a new time, so a
+frontend that keeps registering keeps its target. A `PATCH` without
+`expires_in` leaves the target with no time of its own.
+
+When the frontend stops, it can remove its target at once:
+
+```text
+DELETE /api/consumer-node-preview/targets?consumer=<uuid>
+Content-Type: application/json
+
+{"target": {"label": "Tunnel"}}
+```
+
+A label that no target has changes nothing, so the request is safe to repeat.
+
+### Targets that don't expire
+
 Settings targets never expire, and neither do targets added on the consumer
 form. The exception is a `PATCH` with the same label as a form target, which
-takes it over. A `PUT` or form save keeps the time if the label and URL don't
-change. A new label or URL clears it, so that target no longer expires.
+takes it over. A `PUT` or form save keeps the times if the label and URL don't
+change. A new label or URL clears them, so that target no longer expires.
 
 ## Linking to a target
 

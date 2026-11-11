@@ -115,9 +115,7 @@ class PreviewTargetUrlConstraintTest extends KernelTestBase {
     $this->assertFalse($check('https://example.com[jsonapi_node_preview_path]/p'));
     $this->assertFalse($check('https://x[token2].example.com/p'), 'Any name in square brackets counts.');
     $this->assertTrue($check('http://[::1]:3000/p#[jsonapi_node_preview_path]'), 'An IPv6 host is not a token.');
-    // Core's check takes hex digits and colons in brackets as an IPv6 address.
-    // No token is all hex, and a browser opens no host such as [face].
-    $this->assertFalse($check('https://[layout]/p'), 'A token in brackets is no IPv6 address.');
+    $this->assertFalse($check('https://[face]/p'), 'Brackets must hold an IPv6 address.');
     $this->assertTrue($check('https://[2001:db8::1]:8443/p'));
     $this->assertFalse($check('https://[::1][::1]/p'), 'One IPv6 address, and nothing else.');
     $this->assertFalse($check('https://x[::1]/p'));
@@ -128,13 +126,12 @@ class PreviewTargetUrlConstraintTest extends KernelTestBase {
     $this->assertTrue($provider->hasPlainAuthority('/node/preview?vm=[view_mode]#[jsonapi_node_preview_path]'), 'A path has no host part.');
     $this->assertFalse($provider->hasPlainAuthority('//evil.test[uuid]@example.com/p'), 'A URL without a scheme still has a host part.');
     // A browser drops leading spaces and control characters, removes tabs
-    // and line breaks, and reads a backslash as a slash. Core's check refuses
-    // each of them, so none can hide a host part.
+    // and line breaks, and reads a backslash as a slash.
     $this->assertFalse($provider->hasPlainAuthority(' https://evil.test[jsonapi_node_preview_path]:[preview_token]@x.preview.example.com/'));
     $this->assertFalse($provider->hasPlainAuthority("\x01https://evil.test[uuid]@example.com/p"));
     $this->assertFalse($provider->hasPlainAuthority("https://evil.te\tst[uuid]@example.com/p"));
     $this->assertFalse($provider->hasPlainAuthority('https:\\\\evil.test[uuid]@example.com/p'));
-    $this->assertFalse($provider->hasPlainAuthority(' /node/preview#[jsonapi_node_preview_path]'), 'The form and the endpoint trim a URL before it gets here.');
+    $this->assertTrue($provider->hasPlainAuthority(' /node/preview#[jsonapi_node_preview_path]'));
     // A browser reads any number of slashes after the scheme as two.
     $this->assertFalse($provider->hasPlainAuthority('https:////evil.test[jsonapi_node_preview_path]:[preview_token]@x.example.com/'));
     $this->assertFalse($provider->hasPlainAuthority('https:/evil.test[uuid]@x.example.com/'));

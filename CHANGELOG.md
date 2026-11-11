@@ -21,6 +21,14 @@ and this project adheres to
 - The README links to @druxt-contrib/node-preview, which adds the preview page
   to a Druxt frontend.
 
+### Fixed
+
+- Writing a consumer's preview targets no longer revokes its editors' preview
+  tokens. Simple OAuth revokes every token of a consumer when the consumer is
+  saved, so each registration, refresh, removal or clean-up broke the open
+  previews until the editors pressed Preview again. A change to anything else
+  on the consumer still revokes them.
+
 ### Security
 
 - A preview target's URL can no longer hold a user name or a token in its

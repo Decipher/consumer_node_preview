@@ -28,3 +28,15 @@ services:
       - '@?simple_oauth.repositories.access_token'
       - '@?simple_oauth.repositories.client'
       - '@?simple_oauth.repositories.scope'
+
+  # Keeps a consumer's tokens when only its preview targets or layouts change.
+  # Simple OAuth is optional, so without it there is nothing to decorate.
+  consumer_node_preview.token_expiry_trigger_handler:
+    class: Drupal\consumer_node_preview\PreviewTargetsTokenExpiryTriggerHandler
+    decorates: Drupal\simple_oauth\TokenExpiryTriggerHandlerInterface
+    decoration_on_invalid: ignore
+    arguments: ['@.inner', '@consumer_node_preview.preview_field_changes']
+
+  consumer_node_preview.preview_field_changes:
+    class: Drupal\consumer_node_preview\PreviewFieldChanges
+    arguments: ['@entity_type.manager']

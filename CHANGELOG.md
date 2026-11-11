@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 1.0.0-rc1 (2026-11-11)
 
 ### Added
 
@@ -18,6 +18,17 @@ and this project adheres to
   a frontend that stops.
 - An update that adds the expires column to a 1.0.0-beta1 site, keeping its
   stored targets.
+- The README links to @druxt-contrib/node-preview, which adds the preview page
+  to a Druxt frontend.
+
+### Security
+
+- A preview target's URL can no longer hold a user name or a token in its
+  host part, before its path. Such a URL could pass the allowed target hosts
+  check, then send editors' preview tokens to another host once its tokens
+  were filled in. The consumer form and the targets endpoint refuse it. A
+  target saved before this change leaves the Frontend picker and gets no
+  token, and a settings.php target is left out with a warning in the log.
 
 ## 1.0.0-beta1 (2026-11-06)
 

@@ -61,6 +61,31 @@ class PreviewTargetsUpdateTest extends KernelTestBase {
   }
 
   /**
+   * Tests that the update records the definition after a stopped run.
+   *
+   * A run can stop after it records the column's schema and before it
+   * records the field's definition. The next run finds the column and its
+   * record, and must still record the definition.
+   */
+  public function testTheUpdateFinishesTheDefinitionOfAnEarlierRun(): void {
+    $repository = $this->container->get('entity.last_installed_schema.repository');
+    $installed = $repository->getLastInstalledFieldStorageDefinitions('consumer')['preview_targets'];
+    // The definition as 1.0.0-beta1 installed it, without expires.
+    $stale = clone $installed;
+    $schema = $stale->getSchema();
+    unset($schema['columns']['expires']);
+    $property = new \ReflectionProperty($stale, 'schema');
+    $property->setValue($stale, $schema);
+    $repository->setLastInstalledFieldStorageDefinition($stale);
+    $read = fn(): array => $repository->getLastInstalledFieldStorageDefinitions('consumer')['preview_targets']->getSchema()['columns'];
+    $this->assertArrayNotHasKey('expires', $read());
+
+    $this->assertSame('The expires column is already in place.', consumer_node_preview_update_10001());
+    $this->assertArrayHasKey('expires', $read());
+    $this->assertSame([], $this->pendingChanges());
+  }
+
+  /**
    * Tests that the update adds and records the column, and keeps the targets.
    *
    * @param bool $drop_column

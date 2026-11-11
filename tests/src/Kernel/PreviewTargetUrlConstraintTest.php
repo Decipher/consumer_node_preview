@@ -83,6 +83,86 @@ class PreviewTargetUrlConstraintTest extends KernelTestBase {
     $this->assertFalse($check('https://evilpreview.example.com/p'));
     $this->assertFalse($check('https://a.preview.example.com.evil.test/p'));
     $this->assertFalse($check('https://evil.test\\@example.com/p'));
+
+    // PHP reads the host before the tokens go in. A token or a user name
+    // there could move the host elsewhere once the tokens are filled in.
+    $this->assertFalse($check('https://evil.test[jsonapi_node_preview_path]:[preview_token]@x.preview.example.com/'));
+    $this->assertFalse($check('https://user:pass@x.preview.example.com/p'));
+    $this->assertFalse($check('https://x.preview.example.com:[uuid]/p'));
+    $this->assertFalse($check('https://x[layout].preview.example.com/p'));
+    $this->assertTrue($check('https://x.preview.example.com/p?vm=[view_mode]&layout=[layout]#[jsonapi_node_preview];token=[preview_token]'));
+  }
+
+  /**
+   * Tests that the URL's host part takes no user name and no tokens.
+   *
+   * It holds without the allowlist too, so a URL never moves its host.
+   */
+  public function testAuthorityIsPlain(): void {
+    $check = function (string $url): bool {
+      $context = $this->createMock(ExecutionContextInterface::class);
+      $violations = 0;
+      $context->method('addViolation')->willReturnCallback(function () use (&$violations): void {
+        $violations++;
+      });
+      $validator = PreviewTargetUrlConstraintValidator::create($this->container);
+      $validator->initialize($context);
+      $validator->validate($url, new PreviewTargetUrlConstraint());
+      return $violations === 0;
+    };
+    $this->assertFalse($check('https://user@example.com/p'));
+    $this->assertFalse($check('https://example.com[jsonapi_node_preview]/p'));
+    $this->assertFalse($check('https://example.com[jsonapi_node_preview_path]/p'));
+    $this->assertFalse($check('https://x[token2].example.com/p'), 'Any name in square brackets counts.');
+    $this->assertTrue($check('http://[::1]:3000/p#[jsonapi_node_preview_path]'), 'An IPv6 host is not a token.');
+    $this->assertFalse($check('https://[face]/p'), 'Brackets must hold an IPv6 address.');
+    $this->assertTrue($check('https://[2001:db8::1]:8443/p'));
+    $this->assertFalse($check('https://[::1][::1]/p'), 'One IPv6 address, and nothing else.');
+    $this->assertFalse($check('https://x[::1]/p'));
+    $this->assertFalse($check('https://[::1]x/p'));
+    $this->assertTrue($check('http://localhost:3000/p@x#[jsonapi_node_preview_path]'), 'An @ in the path is fine.');
+
+    $provider = $this->container->get('consumer_node_preview.targets_provider');
+    $this->assertTrue($provider->hasPlainAuthority('/node/preview?vm=[view_mode]#[jsonapi_node_preview_path]'), 'A path has no host part.');
+    $this->assertFalse($provider->hasPlainAuthority('//evil.test[uuid]@example.com/p'), 'A URL without a scheme still has a host part.');
+    // A browser drops leading spaces and control characters, removes tabs
+    // and line breaks, and reads a backslash as a slash.
+    $this->assertFalse($provider->hasPlainAuthority(' https://evil.test[jsonapi_node_preview_path]:[preview_token]@x.preview.example.com/'));
+    $this->assertFalse($provider->hasPlainAuthority("\x01https://evil.test[uuid]@example.com/p"));
+    $this->assertFalse($provider->hasPlainAuthority("https://evil.te\tst[uuid]@example.com/p"));
+    $this->assertFalse($provider->hasPlainAuthority('https:\\\\evil.test[uuid]@example.com/p'));
+    $this->assertTrue($provider->hasPlainAuthority(' /node/preview#[jsonapi_node_preview_path]'));
+    // A browser reads any number of slashes after the scheme as two.
+    $this->assertFalse($provider->hasPlainAuthority('https:////evil.test[jsonapi_node_preview_path]:[preview_token]@x.example.com/'));
+    $this->assertFalse($provider->hasPlainAuthority('https:/evil.test[uuid]@x.example.com/'));
+    $this->assertFalse($provider->hasPlainAuthority('https:evil.test[uuid]@x.example.com/'));
+  }
+
+  /**
+   * Tests that a user name or token in the host part has its own message.
+   */
+  public function testAuthorityMessage(): void {
+    $context = $this->createMock(ExecutionContextInterface::class);
+    $messages = [];
+    $context->method('addViolation')->willReturnCallback(function (string $message) use (&$messages): void {
+      $messages[] = $message;
+    });
+    $constraint = new PreviewTargetUrlConstraint();
+    $validator = PreviewTargetUrlConstraintValidator::create($this->container);
+    $validator->initialize($context);
+    $validator->validate('https://user:pass@x.example.com/p', $constraint);
+    // PHP finds no host in these, but the host part is still the reason.
+    $validator->validate('https://x.example.com:[uuid]/p', $constraint);
+    $validator->validate('https:\\\\evil.test[uuid]@x.example.com/p', $constraint);
+    $validator->validate('https://x[node:nid].example.com/p', $constraint);
+    $validator->validate('ftp://x.example.com/p', $constraint);
+    $this->assertSame([
+      $constraint->authorityMessage,
+      $constraint->authorityMessage,
+      $constraint->authorityMessage,
+      $constraint->authorityMessage,
+      $constraint->message,
+    ], $messages);
   }
 
 }

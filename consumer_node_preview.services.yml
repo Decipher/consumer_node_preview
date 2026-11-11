@@ -13,6 +13,11 @@ services:
       - '@datetime.time'
       - '@consumer_node_preview.preview_token'
       - '@config.factory'
+      - '@logger.channel.consumer_node_preview'
+
+  logger.channel.consumer_node_preview:
+    parent: logger.channel_base
+    arguments: ['consumer_node_preview']
 
   consumer_node_preview.preview_token:
     class: Drupal\consumer_node_preview\PreviewToken

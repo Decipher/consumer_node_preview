@@ -43,6 +43,16 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
     if (!is_string($value) || trim($value) === '') {
       return;
     }
+    // A user name or a token in the host part fails first, with its own
+    // message. PHP finds no host in some of these, but this is the reason.
+    if (!$this->targetsProvider->hasPlainAuthority($value)) {
+      // A target saved before this check can stay, so it doesn't block the
+      // consumer's other targets. It stays out of the picker.
+      if (!$this->isStored($value)) {
+        $this->context->addViolation($constraint->authorityMessage, ['%url' => $value]);
+      }
+      return;
+    }
     // The value as stored. A leading space would break the URL in the frame,
     // so it fails here. The form and the endpoint trim before they save.
     $parts = parse_url($value);
@@ -64,11 +74,14 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
   }
 
   /**
-   * Checks whether the consumer already has this URL saved.
+   * Checks whether the consumer already has this target saved.
    *
    * A saved target on a host taken off the allowlist stays out of the
    * Frontend picker. Keeping it must not stop the consumer saving, or one
-   * frontend's old target would block another frontend's registration.
+   * frontend's old target would block another frontend's registration. Only
+   * the same target counts, by its label and URL, so a new target can't copy
+   * an old target's URL past the checks. Each saved copy covers one copy in
+   * the field, so an extra copy is new too.
    *
    * @param string $url
    *   The URL being validated.
@@ -84,8 +97,23 @@ class PreviewTargetUrlConstraintValidator extends ConstraintValidator implements
     if (!$stored instanceof ContentEntityInterface) {
       return FALSE;
     }
-    $urls = array_column($stored->get($item->getFieldDefinition()->getName())->getValue(), 'url');
-    return in_array($url, $urls, TRUE);
+    $name = $item->getFieldDefinition()->getName();
+    $label = (string) $item->get('label')->getValue();
+    $same = fn(mixed $saved_label, mixed $saved_url): bool => $saved_url === $url && (string) $saved_label === $label;
+    $saved = 0;
+    foreach ($stored->get($name)->getValue() as $value) {
+      $saved += (int) $same($value['label'] ?? '', $value['url'] ?? NULL);
+    }
+    // This item's place among the field's copies of the same target.
+    $copy = 0;
+    /** @var \Drupal\Core\Field\FieldItemInterface $other */
+    foreach ($entity->get($name) as $other) {
+      $copy += (int) $same($other->get('label')->getValue(), $other->get('url')->getValue());
+      if ($other === $item) {
+        break;
+      }
+    }
+    return $copy > 0 && $copy <= $saved;
   }
 
 }

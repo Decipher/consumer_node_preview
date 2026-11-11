@@ -15,6 +15,7 @@ use Drupal\Core\Url;
 use Drupal\jsonapi\ResourceType\ResourceType;
 use Drupal\jsonapi\ResourceType\ResourceTypeRepositoryInterface;
 use Drupal\node\NodeInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Routing\Exception\RouteNotFoundException;
 
 /**
@@ -42,6 +43,13 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
    */
   protected const INCLUDE_DEPTH = 3;
 
+  /**
+   * The settings.php targets already logged as left out, keyed by name.
+   *
+   * @var array<string, true>
+   */
+  protected array $leftOut = [];
+
   public function __construct(
     protected EntityTypeManagerInterface $entityTypeManager,
     protected ResourceTypeRepositoryInterface $resourceTypeRepository,
@@ -49,6 +57,7 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     protected TimeInterface $time,
     protected PreviewToken $previewToken,
     protected ConfigFactoryInterface $configFactory,
+    protected ?LoggerInterface $logger = NULL,
   ) {}
 
   /**
@@ -376,6 +385,33 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
   }
 
   /**
+   * {@inheritdoc}
+   */
+  public function hasPlainAuthority(string $url): bool {
+    // Read the URL as a browser does. It drops leading and trailing spaces and
+    // control characters, removes tabs and line breaks, and reads a backslash
+    // as a slash.
+    $url = str_replace(["\t", "\n", "\r", '\\'], ['', '', '', '/'], trim($url, "\x00..\x20"));
+    // For http and https, a browser reads any number of slashes after the
+    // scheme, even none, as the start of the host part. Other URLs have one
+    // only after "//". A path, such as a settings.php target's, has none.
+    if (!preg_match('#^https?:/*([^/?\#]*)#i', $url, $matches) && !preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//([^/?\#]*)#i', $url, $matches)) {
+      return TRUE;
+    }
+    // A user name ends at "@". Square brackets may only hold an IPv6 address.
+    // Anything else in them is a token, or a host no browser can open.
+    if (str_contains($matches[1], '@')) {
+      return FALSE;
+    }
+    if (strpbrk($matches[1], '[]') === FALSE) {
+      return TRUE;
+    }
+    // A bracketed host part is one IPv6 address, then an optional port.
+    return preg_match('/^\[([^\[\]]+)\](?::\d*)?$/', $matches[1], $address) === 1
+      && filter_var($address[1], FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== FALSE;
+  }
+
+  /**
    * Whether a saved target's URL is on a host the site still allows.
    *
    * The allowed hosts can change after a target is saved. A target outside
@@ -385,6 +421,9 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
    *   The target's URL template.
    */
   protected function allowsStoredUrl(string $url): bool {
+    if (!$this->hasPlainAuthority($url)) {
+      return FALSE;
+    }
     if (!$this->getAllowedHosts()) {
       return TRUE;
     }
@@ -428,6 +467,15 @@ class PreviewTargetsProvider implements PreviewTargetsProviderInterface {
     $targets = [];
     foreach (Settings::get('consumer_node_preview', [])['targets'] ?? [] as $name => $target) {
       $url = trim((string) ($target['url'] ?? ''));
+      if ($url !== '' && !$this->hasPlainAuthority($url)) {
+        // The URL check never sees settings.php, so say why the target is
+        // gone. Once per request is enough.
+        if (!isset($this->leftOut[$name])) {
+          $this->leftOut[$name] = TRUE;
+          $this->logger?->warning('Left out the settings.php preview target @name: its URL has a user name or a token before the path.', ['@name' => $name]);
+        }
+        continue;
+      }
       if ($url !== '') {
         $layouts = array_filter(
           (array) ($target['layouts'] ?? []),

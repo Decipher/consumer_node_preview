@@ -6,6 +6,9 @@ namespace Drupal\Tests\consumer_node_preview\Kernel;
 
 use Drupal\consumer_node_preview\Plugin\Field\FieldWidget\PreviewTargetWidget;
 use Drupal\consumer_node_preview\PreviewToken;
+use Drupal\Core\Logger\RfcLoggerTrait;
+use Drupal\Core\Logger\RfcLogLevel;
+use Psr\Log\LoggerInterface;
 use Drupal\consumers\Entity\Consumer;
 use Drupal\Core\Form\FormState;
 use Drupal\KernelTests\KernelTestBase;
@@ -14,6 +17,7 @@ use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Drupal\node\Entity\Node;
 use Drupal\node\Entity\NodeType;
 use Symfony\Component\Validator\ConstraintViolation;
+use Symfony\Component\Validator\ConstraintViolationInterface;
 use Symfony\Component\Validator\ConstraintViolationListInterface;
 
 /**
@@ -421,6 +425,104 @@ class PreviewTargetsFieldTest extends KernelTestBase {
     $this->assertSame([$kept], array_keys($this->provider->getAllTargets()));
     $this->assertNull($this->provider->getTargetByKey($old));
     $this->assertNotNull($this->provider->getTargetByKey($kept));
+  }
+
+  /**
+   * Tests that a saved target with tokens in its host part leaves the picker.
+   *
+   * A target saved before the URL check refused it must not get a token.
+   */
+  public function testStoredTargetWithTokensInItsHostLeavesThePicker(): void {
+    $consumer = $this->createConsumer('App', [
+      ['label' => 'Moved', 'url' => 'https://evil.test[jsonapi_node_preview_path]:[preview_token]@x.preview.example.com/'],
+      ['label' => 'Kept', 'url' => 'https://x.preview.example.com/p#[jsonapi_node_preview];token=[preview_token]'],
+    ]);
+    $this->config('consumer_node_preview.settings')
+      ->set('allowed_target_hosts', ['*.preview.example.com'])
+      ->save();
+    $this->assertSame([$consumer->id() . ':1'], array_keys($this->provider->getAllTargets()));
+    $this->assertNull($this->provider->getTargetByKey($consumer->id() . ':0'));
+  }
+
+  /**
+   * Tests that a saved target with a user name doesn't block other targets.
+   *
+   * It stays out of the picker, but the consumer can still save new targets.
+   */
+  public function testStoredTargetWithUserNameStillSaves(): void {
+    $consumer = $this->createConsumer('App', [
+      ['label' => 'Old', 'url' => 'https://user:pass@old.example.com/p'],
+    ]);
+    $paths = fn(): array => array_map(
+      fn(ConstraintViolationInterface $violation): string => $violation->getPropertyPath(),
+      iterator_to_array($consumer->validate()->getByField('preview_targets')),
+    );
+    $consumer->get('preview_targets')->appendItem(['label' => 'New', 'url' => 'https://new.example.com/p']);
+    $this->assertSame([], $paths());
+    $consumer->save();
+    $this->assertSame([$consumer->id() . ':1'], array_keys($this->provider->getAllTargets()));
+
+    // A new target with a user name is still refused, even with the old URL.
+    $consumer->get('preview_targets')->appendItem(['label' => 'Bad', 'url' => 'https://user@bad.example.com/p']);
+    $consumer->get('preview_targets')->appendItem(['label' => 'Copy', 'url' => 'https://user:pass@old.example.com/p']);
+    $this->assertSame(['preview_targets.2.url', 'preview_targets.3.url'], $paths());
+  }
+
+  /**
+   * Tests that each saved copy of a target exempts one copy, and no more.
+   *
+   * Saved once, a target with a user name can stay. A second copy with the
+   * same label and URL is new, so the check refuses it.
+   */
+  public function testStoredTargetExemptsOneCopyEach(): void {
+    $old = ['label' => 'Old', 'url' => 'https://user:pass@old.example.com/p'];
+    $consumer = $this->createConsumer('App', [$old]);
+    $paths = fn(): array => array_map(
+      fn(ConstraintViolationInterface $violation): string => $violation->getPropertyPath(),
+      iterator_to_array($consumer->validate()->getByField('preview_targets')),
+    );
+    $consumer->set('preview_targets', [$old, ['label' => 'New', 'url' => 'https://new.example.com/p'], $old]);
+    $this->assertSame(['preview_targets.2.url'], $paths());
+
+    // Saved twice, both copies can stay, wherever they are.
+    $twice = $this->createConsumer('Twice', [$old, $old]);
+    $twice->set('preview_targets', [['label' => 'New', 'url' => 'https://new.example.com/p'], $old, $old]);
+    $this->assertSame([], iterator_to_array($twice->validate()->getByField('preview_targets')));
+  }
+
+  /**
+   * Tests that a settings.php target with tokens in its host part is left out.
+   */
+  public function testSiteTargetWithTokensInItsHostIsLeftOut(): void {
+    $this->setSetting('consumer_node_preview', [
+      'targets' => [
+        'moved' => ['label' => 'Moved', 'url' => 'https://evil.test[jsonapi_node_preview_path]:[preview_token]@x.example.com/'],
+        'kept' => ['label' => 'Kept', 'url' => 'https://x.example.com/p#[jsonapi_node_preview_path]'],
+      ],
+    ]);
+    $logger = new class() implements LoggerInterface {
+      use RfcLoggerTrait;
+
+      /**
+       * The entries logged, as the level and the message.
+       *
+       * @var list<array{mixed, string}>
+       */
+      public array $logged = [];
+
+      /**
+       * {@inheritdoc}
+       */
+      public function log($level, string|\Stringable $message, array $context = []): void {
+        $this->logged[] = [$level, strtr((string) $message, $context)];
+      }
+
+    };
+    $this->container->get('logger.factory')->addLogger($logger);
+
+    $this->assertSame(['settings:kept'], array_keys($this->provider->getAllTargets()));
+    $this->assertNull($this->provider->getTargetByKey('settings:moved'));
+    $this->assertSame([[RfcLogLevel::WARNING, 'Left out the settings.php preview target moved: its URL has a user name or a token before the path.']], $logger->logged, 'It is logged once per request.');
   }
 
   /**

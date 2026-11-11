@@ -6,6 +6,9 @@
 
 Preview unsaved content in your decoupled frontend from Drupal's Preview button.
 Your frontend needs a preview page that fetches the draft. See "Target URLs".
+For a [Druxt](https://druxtjs.org) frontend,
+[@druxt-contrib/node-preview](https://github.com/druxt-contrib/druxt-node-preview)
+adds that page, and can register the frontend as a preview target itself.
 
 ![The preview screen, with the Frontend tab showing an unsaved page.](https://git.drupalcode.org/project/consumer_node_preview/-/raw/1.0.x/docs/images/preview-screen.png)
 

@@ -15,12 +15,14 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
- * Reads, replaces and registers the preview targets of one consumer.
+ * Reads, replaces, registers and removes the preview targets of one consumer.
  *
  * GET reads the targets and layouts. PUT replaces the whole list. PATCH
  * registers one target: it replaces the target with the same label, or adds
- * it, and stamps it with the request time. A stamped target expires when no
- * PATCH refreshes it.
+ * it, and stamps it with the request time. A stamped target goes inactive
+ * when no PATCH refreshes it. A PATCH can also give the target an
+ * "expires_in" time, after which it leaves the picker. DELETE removes the
+ * target with a label, as a frontend does when it stops.
  *
  * The route requires the "register consumer node preview targets"
  * permission. On top of that, this controller only serves a consumer the
@@ -51,7 +53,7 @@ final class PreviewTargetsController extends ControllerBase {
   }
 
   /**
-   * Handles GET, PUT and PATCH for the targets resource.
+   * Handles GET, PUT, PATCH and DELETE for the targets resource.
    */
   public function handle(Request $request): JsonResponse {
     $consumer = $this->resolveConsumer($request);
@@ -65,6 +67,7 @@ final class PreviewTargetsController extends ControllerBase {
     $error = match ($request->getMethod()) {
       'PUT' => $this->replaceTargets($consumer, (string) $request->getContent()),
       'PATCH' => $this->registerTarget($consumer, (string) $request->getContent()),
+      'DELETE' => $this->removeTarget($consumer, (string) $request->getContent()),
       default => NULL,
     };
     if ($error !== NULL) {
@@ -154,6 +157,10 @@ final class PreviewTargetsController extends ControllerBase {
    * other targets and their stamps stay as they are. A "layouts" list
    * replaces the consumer's layouts, as for a PUT.
    *
+   * An "expires_in" number of seconds on the target sets its expires time.
+   * It is capped at the delete_after setting, so a target can't outstay the
+   * site's own limit. A target registered without one has no expires time.
+   *
    * @return string|null
    *   An error message, or NULL on success.
    */
@@ -166,7 +173,12 @@ final class PreviewTargetsController extends ControllerBase {
     if (is_string($value)) {
       return 'Target: ' . $value;
     }
+    $expires_in = $decoded['target']['expires_in'] ?? NULL;
+    if ($expires_in !== NULL && (!is_int($expires_in) || $expires_in < 1)) {
+      return 'Target: "expires_in" must be a whole number of seconds above zero.';
+    }
     $value['last_seen'] = $this->time->getRequestTime();
+    $value['expires'] = $expires_in === NULL ? NULL : $value['last_seen'] + min($expires_in, $this->previewTargetsProvider->getDeleteAfter());
 
     $values = $consumer->get('preview_targets')->getValue();
     $delta = count($values);
@@ -178,6 +190,31 @@ final class PreviewTargetsController extends ControllerBase {
     }
     $values[$delta] = $value;
     return $this->save($consumer, array_values($values), $decoded);
+  }
+
+  /**
+   * Validates the payload and removes one target from the consumer.
+   *
+   * The payload names the target by its label, as a PATCH does. The other
+   * targets and their stamps stay as they are. A label that no target has
+   * changes nothing, so a frontend can repeat the request safely.
+   *
+   * @return string|null
+   *   An error message, or NULL on success.
+   */
+  protected function removeTarget(ConsumerInterface $consumer, string $payload): ?string {
+    $decoded = json_decode($payload, TRUE);
+    if (!is_array($decoded) || !is_array($decoded['target'] ?? NULL) || !is_string($decoded['target']['label'] ?? NULL)) {
+      return 'The payload must be a JSON object with a "target" object that has a "label" string.';
+    }
+    $label = trim($decoded['target']['label']);
+    $targets = $consumer->get('preview_targets');
+    $count = $targets->count();
+    $targets->filter(fn($item): bool => $item->get('label')->getValue() !== $label);
+    if ($targets->count() < $count) {
+      $consumer->save();
+    }
+    return NULL;
   }
 
   /**

@@ -12,8 +12,8 @@ declare(strict_types=1);
  *
  * Drupal won't change a field's columns while it holds data, which a site
  * with registered targets does. So the column is added in place, and the
- * targets stay as they were. A run that stopped after adding the column
- * records it on the next run.
+ * targets stay as they were. A run that stopped partway, after adding the
+ * column or recording it, finishes on the next run.
  */
 function consumer_node_preview_update_10001(): string {
   $manager = \Drupal::entityDefinitionUpdateManager();
@@ -34,6 +34,10 @@ function consumer_node_preview_update_10001(): string {
 
   $exists = $schema->fieldExists($table, $column);
   if ($exists && isset($stored[$table]['fields'][$column])) {
+    // A run may have stopped after it recorded the column and before it
+    // recorded the field's definition. On a site that is up to date, this
+    // writes the same definition again.
+    \Drupal::service('entity.last_installed_schema.repository')->setLastInstalledFieldStorageDefinition($definition);
     return 'The expires column is already in place.';
   }
 

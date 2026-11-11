@@ -148,6 +148,36 @@ class PreviewTokenTest extends KernelTestBase {
   }
 
   /**
+   * Tests that writing the consumer's preview fields keeps its tokens.
+   *
+   * Simple OAuth revokes every token of a consumer when the consumer is
+   * saved. A registration, its refresh, a removal and cron write only the
+   * preview targets, and an editor's open preview must keep working. Any
+   * other change still revokes them, as Simple OAuth intends.
+   */
+  public function testPreviewFieldWritesKeepTokens(): void {
+    $token = $this->tokens(time())->create($this->consumer);
+    $this->assertNotNull($this->authenticate($token));
+
+    $consumer = Consumer::load($this->consumer->id());
+    $consumer->set('preview_targets', [
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p', 'last_seen' => time()],
+    ])->save();
+    $this->assertNotNull($this->authenticate($token), 'A target write keeps the token.');
+    $consumer = Consumer::load($this->consumer->id());
+    $consumer->set('preview_layouts', ['default'])->save();
+    $this->assertNotNull($this->authenticate($token), 'A layouts write keeps it too.');
+
+    // A change beside the targets revokes, and so does any other change.
+    $consumer = Consumer::load($this->consumer->id());
+    $consumer->set('preview_targets', [])->set('label', 'Renamed')->save();
+    $this->assertNull($this->authenticate($token));
+    $second = $this->tokens(time())->create($this->consumer);
+    Consumer::load($this->consumer->id())->set('description', 'Changed')->save();
+    $this->assertNull($this->authenticate($second));
+  }
+
+  /**
    * Tests that a blocked editor's token is refused.
    */
   public function testBlockedEditor(): void {

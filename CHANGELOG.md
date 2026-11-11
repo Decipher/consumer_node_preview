@@ -19,6 +19,14 @@ and this project adheres to
 - An update that adds the expires column to a 1.0.0-beta1 site, keeping its
   stored targets.
 
+### Fixed
+
+- Writing a consumer's preview targets no longer revokes its editors' preview
+  tokens. Simple OAuth revokes every token of a consumer when the consumer is
+  saved, so each registration, refresh, removal or clean-up broke the open
+  previews until the editors pressed Preview again. A change to anything else
+  on the consumer still revokes them.
+
 ## 1.0.0-beta1 (2026-11-06)
 
 ### Added

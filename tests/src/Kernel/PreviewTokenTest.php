@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\consumer_node_preview\Kernel;
 
 use Drupal\Component\Datetime\TimeInterface;
+use Drupal\consumer_node_preview\PreviewTargetsTokenExpiryTriggerHandler;
 use Drupal\consumer_node_preview\PreviewToken;
 use Drupal\consumers\Entity\Consumer;
 use Drupal\consumers\Entity\ConsumerInterface;
@@ -12,6 +13,7 @@ use Drupal\Core\Session\AccountInterface;
 use Drupal\KernelTests\KernelTestBase;
 use Drupal\simple_oauth\Authentication\TokenAuthUserInterface;
 use Drupal\simple_oauth\Exception\OAuthUnauthorizedHttpException;
+use Drupal\simple_oauth\TokenExpiryTriggerHandlerInterface;
 use Drupal\user\Entity\User;
 use Drupal\user\UserInterface;
 use League\OAuth2\Server\Exception\UniqueTokenIdentifierConstraintViolationException;
@@ -145,6 +147,74 @@ class PreviewTokenTest extends KernelTestBase {
     $this->config('consumer_node_preview.settings')->set('token_lifetime', 120)->save();
     $this->assertNotNull($this->authenticate($this->tokens(time() - 60)->create($this->consumer)));
     $this->assertNull($this->authenticate($this->tokens(time() - 180)->create($this->consumer)));
+  }
+
+  /**
+   * Tests that writing the consumer's preview fields keeps its tokens.
+   *
+   * Simple OAuth revokes every token of a consumer when the consumer is
+   * saved. A registration, its refresh, a removal and cron write only the
+   * preview targets, and an editor's open preview must keep working. Any
+   * other change still revokes them, as Simple OAuth intends.
+   */
+  public function testPreviewFieldWritesKeepTokens(): void {
+    $token = $this->tokens(time())->create($this->consumer);
+    $this->assertNotNull($this->authenticate($token));
+
+    $consumer = Consumer::load($this->consumer->id());
+    $consumer->set('preview_targets', [
+      ['label' => 'Local', 'url' => 'http://localhost:3000/p', 'last_seen' => time()],
+    ])->save();
+    $this->assertNotNull($this->authenticate($token), 'A target write keeps the token.');
+    $consumer = Consumer::load($this->consumer->id());
+    $consumer->set('preview_layouts', ['default'])->save();
+    $this->assertNotNull($this->authenticate($token), 'A layouts write keeps it too.');
+
+    // A change beside the targets revokes, and so does any other change.
+    $consumer = Consumer::load($this->consumer->id());
+    $consumer->set('preview_targets', [])->set('label', 'Renamed')->save();
+    $this->assertNull($this->authenticate($token));
+    $second = $this->tokens(time())->create($this->consumer);
+    Consumer::load($this->consumer->id())->set('description', 'Changed')->save();
+    $this->assertNull($this->authenticate($second));
+  }
+
+  /**
+   * Tests that the module passes Simple OAuth's other token handling on.
+   *
+   * Only a consumer update that changes the preview fields alone is kept from
+   * Simple OAuth. Its cron, a user update and a consumer's deletion all go on
+   * to Simple OAuth as before.
+   */
+  public function testOtherTokenHandlingGoesToSimpleOauth(): void {
+    $handler = $this->container->get(TokenExpiryTriggerHandlerInterface::class);
+    $this->assertInstanceOf(PreviewTargetsTokenExpiryTriggerHandler::class, $handler);
+    $tokens = $this->container->get('entity_type.manager')->getStorage('oauth2_token');
+
+    // Cron deletes an expired token.
+    $this->tokens(time() - PreviewToken::LIFETIME - 60)->create($this->consumer);
+    $this->assertCount(1, $tokens->loadMultiple());
+    $handler->handleCron();
+    $this->assertCount(0, $tokens->loadMultiple());
+
+    // A user update and a consumer's deletion revoke the editor's token.
+    $token = $this->tokens(time())->create($this->consumer);
+    $this->user->setPassword('changed')->save();
+    $this->assertNull($this->authenticate($token));
+    $token = $this->tokens(time())->create($this->consumer);
+    $this->consumer->delete();
+    $this->assertNull($this->authenticate($token));
+  }
+
+  /**
+   * Tests that a consumer the storage no longer has gets no exemption.
+   */
+  public function testGoneConsumerIsNotExempt(): void {
+    $changes = $this->container->get('consumer_node_preview.preview_field_changes');
+    $consumer = Consumer::load($this->consumer->id());
+    $this->consumer->delete();
+    $changes->record($consumer);
+    $this->assertFalse($changes->onlyPreviewFieldsChanged($consumer));
   }
 
   /**
